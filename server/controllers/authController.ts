@@ -1,0 +1,247 @@
+import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
+import User from '../models/User.ts';
+import Author from '../models/Author.ts';
+import LoginLog from '../models/LoginLog.ts';
+
+const generateToken = (id: string, rememberMe: boolean = false) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET || 'secret', {
+    expiresIn: rememberMe ? '30d' : '24h',
+  });
+};
+
+const validatePassword = (password: string) => {
+  return password.length >= 8 && 
+         /[A-Z]/.test(password) && 
+         /[0-9]/.test(password) && 
+         /[^A-Za-z0-9]/.test(password);
+};
+
+// @desc    Register a new user
+export const registerUser = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email, password, role } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Please provide email and password' });
+    }
+
+    if (!validatePassword(password)) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters, include an uppercase letter, a number, and a special character.' });
+    }
+
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+      return res.status(400).json({ message: 'User already exists' });
+    }
+
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const user = await User.create({
+      email,
+      passwordHash: password,
+      role: role || 'reader',
+      verificationToken
+    });
+
+    if (user) {
+      if (user.role === 'author') {
+        await Author.create({ userId: user._id as any });
+      }
+
+      res.status(201).json({
+        _id: user._id,
+        email: user.email,
+        role: user.role,
+        token: generateToken((user._id as any).toString()),
+        message: 'Registration successful.'
+      });
+    } else {
+      res.status(400).json({ message: 'Invalid user data' });
+    }
+  } catch (error: any) {
+    // Handle Mongoose duplicate key error specifically if it slips through findOne
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'User already exists' });
+    }
+    next(error);
+  }
+};
+
+// @desc    Auth user & get token
+export const loginUser = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email, password, rememberMe } = req.body;
+    const ipAddress = req.ip || req.headers['x-forwarded-for'] as string;
+    const userAgent = req.headers['user-agent'];
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      await LoginLog.create({ email, status: 'failed', reason: 'User not found', ipAddress, userAgent });
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    if (user.lockUntil && user.lockUntil > new Date()) {
+      return res.status(403).json({ message: 'Account is temporarily locked. Try again later.' });
+    }
+
+    if (await user.matchPassword(password)) {
+      user.loginAttempts = 0;
+      user.lockUntil = undefined;
+      user.lastLogin = new Date();
+      await user.save();
+
+      await LoginLog.create({ userId: user._id as any, email, status: 'success', ipAddress, userAgent });
+
+      res.json({
+        _id: user._id,
+        email: user.email,
+        role: user.role,
+        token: generateToken((user._id as any).toString(), rememberMe),
+      });
+    } else {
+      user.loginAttempts += 1;
+      if (user.loginAttempts >= 5) {
+        user.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+      }
+      await user.save();
+
+      await LoginLog.create({ userId: user._id as any, email, status: 'failed', reason: 'Invalid password', ipAddress, userAgent });
+      res.status(401).json({ message: 'Invalid email or password' });
+    }
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+// @desc    Forgot Password
+export const forgotPassword = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+
+    if (user) {
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      user.passwordResetToken = resetToken;
+      user.passwordResetExpires = new Date(Date.now() + 1 * 60 * 60 * 1000);
+      await user.save();
+    }
+    
+    res.json({ message: 'If a user with that email exists, a reset link has been sent.' });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+// @desc    Get user profile
+export const getUserProfile = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user = await User.findById((req as any).user._id);
+    if (user) {
+      res.json({
+        _id: user._id,
+        email: user.email,
+        role: user.role,
+        name: user.name,
+        username: user.username,
+        phone: user.phone,
+        bio: user.bio,
+        location: user.location,
+        avatar: user.avatar,
+        notificationPreferences: user.notificationPreferences,
+        createdAt: user.createdAt,
+      });
+    } else {
+      res.status(404).json({ message: 'User not found' });
+    }
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+// @desc    Update user profile
+export const updateUserProfile = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user = await User.findById((req as any).user._id);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Professional Dynamic Field Update
+    const allowedFields = ['name', 'username', 'phone', 'bio', 'location'];
+    
+    allowedFields.forEach(field => {
+      if (req.body[field] !== undefined) {
+        (user as any)[field] = req.body[field];
+      }
+    });
+    
+    if (req.file) {
+      user.avatar = req.file.path.replace(/\\/g, '/');
+    }
+    
+    if (req.body.notificationPreferences) {
+      try {
+        const prefs = typeof req.body.notificationPreferences === 'string' 
+          ? JSON.parse(req.body.notificationPreferences) 
+          : req.body.notificationPreferences;
+          
+        user.notificationPreferences = {
+          ...user.notificationPreferences,
+          ...prefs
+        };
+      } catch (e) {
+        console.error('Failed to parse notificationPreferences', e);
+      }
+    }
+
+    if (req.body.password) {
+      if (!validatePassword(req.body.password)) {
+        return res.status(400).json({ message: 'New password must meet complexity requirements.' });
+      }
+      user.passwordHash = req.body.password;
+    }
+
+    const updatedUser = await user.save();
+
+    res.json({
+      _id: updatedUser._id,
+      email: updatedUser.email,
+      role: updatedUser.role,
+      name: updatedUser.name,
+      username: updatedUser.username,
+      phone: updatedUser.phone,
+      bio: updatedUser.bio,
+      location: updatedUser.location,
+      avatar: updatedUser.avatar,
+      notificationPreferences: updatedUser.notificationPreferences,
+      token: generateToken((updatedUser._id as any).toString()),
+    });
+  } catch (error: any) {
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'Username already taken' });
+    }
+    next(error);
+  }
+};
+
+// @desc    Delete user profile
+export const deleteUserProfile = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user = await User.findById((req as any).user._id);
+
+    if (user) {
+      if (user.role === 'author') {
+        await Author.findOneAndDelete({ userId: user._id });
+      }
+      await User.findByIdAndDelete(user._id);
+      res.json({ message: 'User removed successfully' });
+    } else {
+      res.status(404).json({ message: 'User not found' });
+    }
+  } catch (error: any) {
+    next(error);
+  }
+};

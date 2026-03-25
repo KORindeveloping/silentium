@@ -1,0 +1,32 @@
+import mongoose from 'mongoose';
+import { MongoMemoryServer } from 'mongodb-memory-server';
+
+const connectDB = async () => {
+  try {
+    let mongoUri = process.env.MONGO_URI;
+
+    // Use a real MongoDB if a URI is provided in .env
+    // Otherwise, start an in-memory database for a zero-config experience
+    if (!mongoUri || mongoUri === 'mongodb://localhost:27017/silentium') {
+      try {
+        // Test real connection first
+        await mongoose.connect(mongoUri || 'mongodb://localhost:27017/silentium', { serverSelectionTimeoutMS: 2000 });
+        console.log(`MongoDB Connected (Local)`);
+      } catch (err) {
+        console.log('Local MongoDB not found. Starting In-Memory MongoDB...');
+        const mongoServer = await MongoMemoryServer.create();
+        mongoUri = mongoServer.getUri();
+        await mongoose.connect(mongoUri);
+        console.log(`Virtual MongoDB Connected (In-Memory)`);
+      }
+    } else {
+      await mongoose.connect(mongoUri);
+      console.log(`MongoDB Connected (Cloud)`);
+    }
+  } catch (error) {
+    console.error(`Error: ${(error as Error).message}`);
+    process.exit(1);
+  }
+};
+
+export default connectDB;
