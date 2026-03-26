@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
 
 const connectDB = async () => {
   try {
@@ -9,7 +8,7 @@ const connectDB = async () => {
     // Otherwise, start an in-memory database for a zero-config experience
     if (!mongoUri || mongoUri === 'mongodb://localhost:27017/silentium') {
       if (process.env.VERCEL) {
-        throw new Error('Database connection failed: In-memory MongoDB is not supported in the Vercel environment. Please provide a valid MONGO_URI in your Vercel project settings.');
+        throw new Error('DATABASE_NOT_CONFIGURED: The MONGO_URI environment variable is missing in Vercel settings.');
       }
       try {
         // Test real connection first
@@ -17,6 +16,8 @@ const connectDB = async () => {
         console.log(`MongoDB Connected (Local)`);
       } catch (err) {
         console.log('Local MongoDB not found. Starting In-Memory MongoDB...');
+        // Dynamic import to prevent loading on Vercel
+        const { MongoMemoryServer } = await import('mongodb-memory-server');
         const mongoServer = await MongoMemoryServer.create();
         mongoUri = mongoServer.getUri();
         await mongoose.connect(mongoUri);

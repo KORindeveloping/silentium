@@ -191,7 +191,8 @@ export const UploadPage: React.FC = () => {
       try {
         data = JSON.parse(xhr.responseText);
       } catch (e) {
-        setError('The server is currently unable to process requests. This often indicates a missing database connection (MONGO_URI) in your environment settings.');
+        const errorSnippet = xhr.responseText.substring(0, 100).replace(/<[^>]*>/g, '').trim();
+        setError(`Server Response Error [${xhr.status}]: ${errorSnippet || 'Check MONGO_URI in environment settings.'}`);
         setIsUploading(false);
         return;
       }

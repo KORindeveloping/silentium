@@ -59,7 +59,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
       try {
         data = JSON.parse(text);
       } catch (e) {
-        throw new Error('The server is currently unable to process requests. This often indicates a missing database connection (MONGO_URI) in your environment settings.');
+        const errorSnippet = text.substring(0, 100).replace(/<[^>]*>/g, '').trim();
+        throw new Error(`Server Response Error [${res.status}]: ${errorSnippet || 'Check MONGO_URI in environment settings.'}`);
       }
 
       if (!res.ok) throw new Error(data.message || 'Something went wrong');
