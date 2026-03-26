@@ -27,15 +27,21 @@ const app = express();
 
 // Database connection management for Serverless
 let isConnected = false;
+let connectionPromise: Promise<void> | null = null;
+
 const ensureConnection = async () => {
   if (isConnected) return;
-  try {
-    await connectDB();
-    isConnected = true;
-  } catch (err) {
-    console.error('DB Connection Error:', err);
-    throw err; // Re-throw so the middleware can catch it
+  // Reuse an in-flight connection attempt to avoid race conditions
+  if (!connectionPromise) {
+    connectionPromise = connectDB()
+      .then(() => { isConnected = true; })
+      .catch((err) => {
+        connectionPromise = null; // Allow retry on next request
+        console.error('DB Connection Error:', err);
+        throw err;
+      });
   }
+  return connectionPromise;
 };
 
 const isDev = process.env.NODE_ENV !== 'production';
@@ -100,6 +106,10 @@ app.use('/api/documents', bookRoutes);
 // Register Error Handler synchronously after API routes
 app.use(errorHandler);
 
+import fs from 'fs';
+
+// ... rest of imports ...
+
 // 5. Frontend / Vite (Async part handled separately)
 const setupFrontend = async () => {
   if (isDev && !process.env.VERCEL) {
@@ -114,11 +124,19 @@ const setupFrontend = async () => {
     }
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res, next) => {
-      if (req.path.startsWith('/api')) return next();
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.get('*', (req, res, next) => {
+        if (req.path.startsWith('/api')) return next();
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    } else {
+      console.warn('Production build directory "dist" not found. Falling back to API only mode.');
+      app.get('*', (req, res, next) => {
+        if (req.path.startsWith('/api')) return next();
+        res.status(404).json({ message: 'The application is still initializing. Please wait a moment.' });
+      });
+    }
   }
 
   if (!process.env.VERCEL) {
@@ -130,6 +148,12 @@ const setupFrontend = async () => {
   }
 };
 
-setupFrontend();
+(async () => {
+  try {
+    await setupFrontend();
+  } catch (err) {
+    console.error('Fatal Initialization Error:', err);
+  }
+})();
 
 export default app;

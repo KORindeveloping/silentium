@@ -2,18 +2,19 @@ import express from 'express';
 import { getBooks, getBookById, createBook, updateBook, deleteBook, toggleLike } from '../controllers/bookController';
 import { protect, author } from '../middleware/authMiddleware';
 import upload from '../middleware/uploadMiddleware';
+import { asyncHandler } from '../middleware/asyncHandler';
 
 const router = express.Router();
 
 router.route('/')
-  .get(getBooks)
-  .post(protect, author, upload.fields([{ name: 'file', maxCount: 1 }, { name: 'coverImage', maxCount: 1 }]), createBook);
+  .get(asyncHandler(getBooks))
+  .post(protect, author, upload.fields([{ name: 'file', maxCount: 1 }, { name: 'coverImage', maxCount: 1 }]), asyncHandler(createBook));
 
 router.route('/:id')
-  .get(getBookById)
-  .put(protect, author, updateBook)
-  .delete(protect, author, deleteBook);
+  .get(asyncHandler(getBookById))
+  .put(protect, author, asyncHandler(updateBook))
+  .delete(protect, author, asyncHandler(deleteBook));
 
-router.route('/:id/like').put(protect, toggleLike);
+router.route('/:id/like').put(protect, asyncHandler(toggleLike));
 
 export default router;
