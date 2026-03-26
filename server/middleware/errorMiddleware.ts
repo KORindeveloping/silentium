@@ -1,30 +1,42 @@
 import { Request, Response, NextFunction } from 'express';
 
 export const errorHandler = (err: any, req: Request, res: Response, next: NextFunction) => {
-  console.log('ErrorHandler reached. Error:', err);
-  const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
-  
-  // Log the error for admin tracking
-  console.error(`[Error Details] ${req.method} ${req.url}:`);
-  console.error(err); // This should print the stack trace
+  // Ensure we don't crash the error handler itself
+  try {
+    const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+    res.status(statusCode);
 
-  // Handle common Mongoose/DB errors
-  if (err.name === 'ValidationError') {
-    return res.status(400).json({
-      message: 'Validation failed',
-      errors: Object.values(err.errors).map((e: any) => e.message)
+    console.error(`[Server Error] ${req.method} ${req.url}:`, err);
+
+    // Mongoose Validation Error
+    if (err.name === 'ValidationError') {
+      return res.json({
+        message: 'Validation failed',
+        errors: Object.values(err.errors || {}).map((e: any) => e.message)
+      });
+    }
+
+    // Mongoose Duplicate Key Error
+    if (err.code === 11000) {
+      const field = err.keyValue ? Object.keys(err.keyValue)[0] : 'resource';
+      return res.status(400).json({
+        message: `${field} already exists (duplicate key error)`,
+        field
+      });
+    }
+
+    // Default Error Response
+    res.json({
+      message: err.message || 'Internal Server Error',
+      error: isDev ? err : undefined,
+      stack: isDev ? err.stack : undefined,
     });
+  } catch (fatalError) {
+    console.error('Fatal Error in Error Handler:', fatalError);
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Internal Server Error' });
+    }
   }
-
-  if (err.code === 11000) {
-    return res.status(400).json({
-      message: 'Resource already exists (duplicate key error)',
-      field: Object.keys(err.keyValue)[0]
-    });
-  }
-
-  res.status(statusCode).json({
-    message: err.message || 'Internal Server Error',
-    stack: process.env.NODE_ENV === 'production' ? null : err.stack,
-  });
 };
+
+const isDev = process.env.NODE_ENV !== 'production';

@@ -8,7 +8,7 @@ const connectDB = async () => {
     // Otherwise, start an in-memory database for a zero-config experience
     if (!mongoUri || mongoUri === 'mongodb://localhost:27017/silentium') {
       if (process.env.VERCEL) {
-        throw new Error('DATABASE_NOT_CONFIGURED: The MONGO_URI environment variable is missing in Vercel settings.');
+        throw new Error('CONFIGURATION_ERROR: The MONGO_URI environment variable is not defined in Vercel. Please add it to your Project Settings > Environment Variables.');
       }
       try {
         // Test real connection first
