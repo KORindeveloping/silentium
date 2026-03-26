@@ -59,7 +59,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
       try {
         data = JSON.parse(text);
       } catch (e) {
-        throw new Error('The server encountered an issue and returned an invalid response. Please try again in a few moments.');
+        throw new Error('The server is currently unable to process requests. This often indicates a missing database connection (MONGO_URI) in your environment settings.');
       }
 
       if (!res.ok) throw new Error(data.message || 'Something went wrong');

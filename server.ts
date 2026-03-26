@@ -95,14 +95,21 @@ app.use('/api/comments', commentRoutes);
 app.use('/api/user', authRoutes);
 app.use('/api/documents', bookRoutes);
 
+// Register Error Handler synchronously after API routes
+app.use(errorHandler);
+
 // 5. Frontend / Vite (Async part handled separately)
 const setupFrontend = async () => {
   if (isDev && !process.env.VERCEL) {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
+    try {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+    } catch (err) {
+      console.error('Vite Server Error:', err);
+    }
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
@@ -111,9 +118,6 @@ const setupFrontend = async () => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
-
-  // Final Error Handler - Must be last
-  app.use(errorHandler);
 
   if (!process.env.VERCEL) {
     const PORT = Number(process.env.PORT) || 3000;
