@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import Book from '../models/Book.ts';
-import User from '../models/User.ts';
+import Book from '../models/Book';
+import User from '../models/User';
 import path from 'path';
 
 // @desc    Get all books

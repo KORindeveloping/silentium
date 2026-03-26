@@ -1,7 +1,7 @@
 import express from 'express';
-import { getBooks, getBookById, createBook, updateBook, deleteBook, toggleLike } from '../controllers/bookController.ts';
-import { protect, author } from '../middleware/authMiddleware.ts';
-import upload from '../middleware/uploadMiddleware.ts';
+import { getBooks, getBookById, createBook, updateBook, deleteBook, toggleLike } from '../controllers/bookController';
+import { protect, author } from '../middleware/authMiddleware';
+import upload from '../middleware/uploadMiddleware';
 
 const router = express.Router();
 

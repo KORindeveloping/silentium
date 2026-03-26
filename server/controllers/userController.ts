@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import User from '../models/User.ts';
-import Book from '../models/Book.ts';
+import User from '../models/User';
+import Book from '../models/Book';
 
 // @desc    Toggle Save Book
 // @route   PUT /api/users/library/:id

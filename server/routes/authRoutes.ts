@@ -1,8 +1,8 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { registerUser, loginUser, getUserProfile, forgotPassword, updateUserProfile, deleteUserProfile } from '../controllers/authController.ts';
-import { protect } from '../middleware/authMiddleware.ts';
-import upload from '../middleware/uploadMiddleware.ts';
+import { registerUser, loginUser, getUserProfile, forgotPassword, updateUserProfile, deleteUserProfile } from '../controllers/authController';
+import { protect } from '../middleware/authMiddleware';
+import upload from '../middleware/uploadMiddleware';
 
 const router = express.Router();
 

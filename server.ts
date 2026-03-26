@@ -5,18 +5,18 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import connectDB from './server/config/db.ts';
+import connectDB from './server/config/db';
 
-import authRoutes from './server/routes/authRoutes.ts';
-import bookRoutes from './server/routes/bookRoutes.ts';
-import analyticsRoutes from './server/routes/analyticsRoutes.ts';
-import adminRoutes from './server/routes/adminRoutes.ts';
-import paymentRoutes from './server/routes/paymentRoutes.ts';
-import revenueRoutes from './server/routes/revenueRoutes.ts';
-import userRoutes from './server/routes/userRoutes.ts';
-import commentRoutes from './server/routes/commentRoutes.ts';
-import { errorHandler } from './server/middleware/errorMiddleware.ts';
-import { asyncHandler } from './server/middleware/asyncHandler.ts';
+import authRoutes from './server/routes/authRoutes';
+import bookRoutes from './server/routes/bookRoutes';
+import analyticsRoutes from './server/routes/analyticsRoutes';
+import adminRoutes from './server/routes/adminRoutes';
+import paymentRoutes from './server/routes/paymentRoutes';
+import revenueRoutes from './server/routes/revenueRoutes';
+import userRoutes from './server/routes/userRoutes';
+import commentRoutes from './server/routes/commentRoutes';
+import { errorHandler } from './server/middleware/errorMiddleware';
+import { asyncHandler } from './server/middleware/asyncHandler';
 
 dotenv.config();
 

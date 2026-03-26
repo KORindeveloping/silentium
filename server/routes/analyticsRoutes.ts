@@ -1,6 +1,6 @@
 import express from 'express';
-import { trackReading, getAuthorStats, requestPayout } from '../controllers/analyticsController.ts';
-import { protect, author } from '../middleware/authMiddleware.ts';
+import { trackReading, getAuthorStats, requestPayout } from '../controllers/analyticsController';
+import { protect, author } from '../middleware/authMiddleware';
 
 const router = express.Router();
 

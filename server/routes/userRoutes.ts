@@ -1,6 +1,6 @@
 import express from 'express';
-import { toggleSaveBook, toggleFollowUser, getUserLibrary } from '../controllers/userController.ts';
-import { protect } from '../middleware/authMiddleware.ts';
+import { toggleSaveBook, toggleFollowUser, getUserLibrary } from '../controllers/userController';
+import { protect } from '../middleware/authMiddleware';
 
 const router = express.Router();
 

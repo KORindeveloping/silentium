@@ -1,6 +1,6 @@
 import express from 'express';
-import { getAdminStats, updateBookStatus, getPayouts } from '../controllers/adminController.ts';
-import { protect, admin } from '../middleware/authMiddleware.ts';
+import { getAdminStats, updateBookStatus, getPayouts } from '../controllers/adminController';
+import { protect, admin } from '../middleware/authMiddleware';
 
 const router = express.Router();
 

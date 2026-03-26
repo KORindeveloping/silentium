@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import Comment from '../models/Comment.ts';
+import Comment from '../models/Comment';
 
 // @desc    Get comments for a book
 // @route   GET /api/comments/:bookId

@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
-import Analytics from '../models/Analytics.ts';
-import Book from '../models/Book.ts';
-import Author from '../models/Author.ts';
-import Payout from '../models/Payout.ts';
+import Analytics from '../models/Analytics';
+import Book from '../models/Book';
+import Author from '../models/Author';
+import Payout from '../models/Payout';
 
 // @desc    Track reading activity
 // @route   POST /api/analytics/track

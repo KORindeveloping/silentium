@@ -1,9 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import User from '../models/User.ts';
-import Author from '../models/Author.ts';
-import LoginLog from '../models/LoginLog.ts';
+import User from '../models/User';
+import Author from '../models/Author';
+import LoginLog from '../models/LoginLog';
 
 const generateToken = (id: string, rememberMe: boolean = false) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'secret', {

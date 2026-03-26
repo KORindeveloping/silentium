@@ -1,6 +1,6 @@
 import express from 'express';
-import { calculateMonthlyPayouts, getMyEarnings, getMonthlyAnalytics } from '../controllers/revenueController.ts';
-import { protect, author, admin } from '../middleware/authMiddleware.ts';
+import { calculateMonthlyPayouts, getMyEarnings, getMonthlyAnalytics } from '../controllers/revenueController';
+import { protect, author, admin } from '../middleware/authMiddleware';
 
 const router = express.Router();
 

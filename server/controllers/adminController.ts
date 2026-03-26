@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
-import Book from '../models/Book.ts';
-import User from '../models/User.ts';
-import Revenue from '../models/Revenue.ts';
-import Payout from '../models/Payout.ts';
+import Book from '../models/Book';
+import User from '../models/User';
+import Revenue from '../models/Revenue';
+import Payout from '../models/Payout';
 
 // @desc    Get admin dashboard stats
 // @route   GET /api/admin/stats

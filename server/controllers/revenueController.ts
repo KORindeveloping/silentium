@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
-import Analytics from '../models/Analytics.ts';
-import Revenue from '../models/Revenue.ts';
-import Payout from '../models/Payout.ts';
-import Book from '../models/Book.ts';
-import User from '../models/User.ts';
-import Author from '../models/Author.ts';
+import Analytics from '../models/Analytics';
+import Revenue from '../models/Revenue';
+import Payout from '../models/Payout';
+import Book from '../models/Book';
+import User from '../models/User';
+import Author from '../models/Author';
 
 // @desc    Calculate and trigger monthly payouts
 // @route   POST /api/revenue/calculate
