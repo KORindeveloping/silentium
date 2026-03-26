@@ -8,6 +8,9 @@ const connectDB = async () => {
     // Use a real MongoDB if a URI is provided in .env
     // Otherwise, start an in-memory database for a zero-config experience
     if (!mongoUri || mongoUri === 'mongodb://localhost:27017/silentium') {
+      if (process.env.VERCEL) {
+        throw new Error('Database connection failed: In-memory MongoDB is not supported in the Vercel environment. Please provide a valid MONGO_URI in your Vercel project settings.');
+      }
       try {
         // Test real connection first
         await mongoose.connect(mongoUri || 'mongodb://localhost:27017/silentium', { serverSelectionTimeoutMS: 2000 });

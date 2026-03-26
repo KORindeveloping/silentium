@@ -16,6 +16,7 @@ import revenueRoutes from './server/routes/revenueRoutes.ts';
 import userRoutes from './server/routes/userRoutes.ts';
 import commentRoutes from './server/routes/commentRoutes.ts';
 import { errorHandler } from './server/middleware/errorMiddleware.ts';
+import { asyncHandler } from './server/middleware/asyncHandler.ts';
 
 dotenv.config();
 
@@ -33,6 +34,7 @@ const ensureConnection = async () => {
     isConnected = true;
   } catch (err) {
     console.error('DB Connection Error:', err);
+    throw err; // Re-throw so the middleware can catch it
   }
 };
 
@@ -67,10 +69,10 @@ app.use(cors());
 app.use(express.json());
 
 // 2. Ensure DB connection for every request
-app.use(async (req, res, next) => {
+app.use(asyncHandler(async (req: any, res: any, next: any) => {
   await ensureConnection();
   next();
-});
+}));
 
 // 3. Static Files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
