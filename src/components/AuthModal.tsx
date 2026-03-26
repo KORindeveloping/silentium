@@ -54,7 +54,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
         body: JSON.stringify(body),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new Error('The server encountered an issue and returned an invalid response. Please try again in a few moments.');
+      }
+
       if (!res.ok) throw new Error(data.message || 'Something went wrong');
 
       localStorage.setItem('token', data.token);

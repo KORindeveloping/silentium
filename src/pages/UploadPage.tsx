@@ -187,11 +187,18 @@ export const UploadPage: React.FC = () => {
     };
 
     xhr.onload = () => {
+      let data;
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch (e) {
+        setError('The server encountered an error during transmission. Please verify your connection and try again.');
+        setIsUploading(false);
+        return;
+      }
+
       if (xhr.status >= 200 && xhr.status < 300) {
-        const data = JSON.parse(xhr.responseText);
         navigate('/publish-success', { state: { bookId: data._id, title: data.title } });
       } else {
-        const data = JSON.parse(xhr.responseText);
         setError(data.message || 'Upload failed');
         setIsUploading(false);
       }

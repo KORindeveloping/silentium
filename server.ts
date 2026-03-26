@@ -36,69 +36,67 @@ const ensureConnection = async () => {
   }
 };
 
-const setupServer = async () => {
-  const PORT = Number(process.env.PORT) || 3000;
-  const isDev = process.env.NODE_ENV !== 'production';
+const isDev = process.env.NODE_ENV !== 'production';
 
-  // 1. Security Headers
-  if (isDev) {
-    app.use((req, res, next) => {
-      res.setHeader("Content-Security-Policy", "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src * ws: wss:;");
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      next();
-    });
-  } else {
-    app.use(helmet({
-      contentSecurityPolicy: {
-        useDefaults: true,
-        directives: {
-          "default-src": ["'self'"],
-          "script-src": ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-          "style-src": ["'self'", "'unsafe-inline'"],
-          "img-src": ["'self'", "data:", "blob:", "https://*"],
-          "frame-src": ["'self'", "blob:"],
-          "object-src": ["'self'", "blob:"],
-          "connect-src": ["'self'"],
-        },
-      },
-      crossOriginEmbedderPolicy: false,
-    }));
-  }
-
-  app.use(cors());
-  app.use(express.json());
-
-  // Ensure DB connection for every request
-  app.use(async (req, res, next) => {
-    await ensureConnection();
+// 1. Security & Body Parsing (Synchronous)
+if (isDev) {
+  app.use((req, res, next) => {
+    res.setHeader("Content-Security-Policy", "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src * ws: wss:;");
+    res.setHeader("Access-Control-Allow-Origin", "*");
     next();
   });
-
-  // 2. Static Files
-  app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
-    setHeaders: (res, filePath) => {
-      if (path.extname(filePath).toLowerCase() === '.pdf') {
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'inline');
-      }
-    }
+} else {
+  app.use(helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        "default-src": ["'self'"],
+        "script-src": ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "img-src": ["'self'", "data:", "blob:", "https://*"],
+        "frame-src": ["'self'", "blob:"],
+        "object-src": ["'self'", "blob:"],
+        "connect-src": ["'self'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
   }));
+}
 
-  // 3. API Routes
-  app.use('/api/auth', authRoutes);
-  app.use('/api/books', bookRoutes);
-  app.use('/api/analytics', analyticsRoutes);
-  app.use('/api/admin', adminRoutes);
-  app.use('/api/payments', paymentRoutes);
-  app.use('/api/revenue', revenueRoutes);
-  app.use('/api/users', userRoutes);
-  app.use('/api/comments', commentRoutes);
+app.use(cors());
+app.use(express.json());
 
-  // Compatibility aliases
-  app.use('/api/user', authRoutes);
-  app.use('/api/documents', bookRoutes);
+// 2. Ensure DB connection for every request
+app.use(async (req, res, next) => {
+  await ensureConnection();
+  next();
+});
 
-  // 4. Vite / Frontend
+// 3. Static Files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+  setHeaders: (res, filePath) => {
+    if (path.extname(filePath).toLowerCase() === '.pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'inline');
+    }
+  }
+}));
+// 4. API Routes (Synchronous Registration)
+app.use('/api/auth', authRoutes);
+app.use('/api/books', bookRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/revenue', revenueRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/comments', commentRoutes);
+
+// Compatibility aliases
+app.use('/api/user', authRoutes);
+app.use('/api/documents', bookRoutes);
+
+// 5. Frontend / Vite (Async part handled separately)
+const setupFrontend = async () => {
   if (isDev && !process.env.VERCEL) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -108,16 +106,17 @@ const setupServer = async () => {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    // Important: Only serve index.html if it's not an API call
     app.get('*', (req, res, next) => {
       if (req.path.startsWith('/api')) return next();
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
+  // Final Error Handler - Must be last
   app.use(errorHandler);
 
   if (!process.env.VERCEL) {
+    const PORT = Number(process.env.PORT) || 3000;
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`Professional server running at http://localhost:${PORT}`);
       console.log(`Mode: ${isDev ? 'Development' : 'Production'}`);
@@ -125,6 +124,6 @@ const setupServer = async () => {
   }
 };
 
-setupServer();
+setupFrontend();
 
 export default app;
