@@ -55,5 +55,5 @@ RevenueSchema.pre<IRevenue>('save', async function () {
   this.platformShare = this.totalRevenue - this.authorPool;
 });
 
-const Revenue = mongoose.model<IRevenue>('Revenue', RevenueSchema);
+const Revenue = mongoose.models.Revenue || mongoose.model<IRevenue>('Revenue', RevenueSchema);
 export default Revenue;

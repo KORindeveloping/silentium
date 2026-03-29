@@ -30,5 +30,5 @@ const AuthorSchema: Schema = new Schema({
   timestamps: true,
 });
 
-const Author = mongoose.model<IAuthor>('Author', AuthorSchema);
+const Author = mongoose.models.Author || mongoose.model<IAuthor>('Author', AuthorSchema);
 export default Author;

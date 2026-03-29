@@ -89,5 +89,5 @@ const BookSchema: Schema = new Schema({
 // Index for search
 BookSchema.index({ title: 'text', description: 'text', tags: 'text' });
 
-const Book = mongoose.model<IBook>('Book', BookSchema);
+const Book = mongoose.models.Book || mongoose.model<IBook>('Book', BookSchema);
 export default Book;

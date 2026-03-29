@@ -41,5 +41,5 @@ const AnalyticsSchema: Schema = new Schema({
 AnalyticsSchema.index({ bookId: 1, timestamp: -1 });
 AnalyticsSchema.index({ userId: 1, bookId: 1 });
 
-const Analytics = mongoose.model<IAnalytics>('Analytics', AnalyticsSchema);
+const Analytics = mongoose.models.Analytics || mongoose.model<IAnalytics>('Analytics', AnalyticsSchema);
 export default Analytics;

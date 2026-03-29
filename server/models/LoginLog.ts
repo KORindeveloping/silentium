@@ -20,5 +20,5 @@ const LoginLogSchema: Schema = new Schema({
   timestamp: { type: Date, default: Date.now }
 });
 
-const LoginLog = mongoose.model<ILoginLog>('LoginLog', LoginLogSchema);
+const LoginLog = mongoose.models.LoginLog || mongoose.model<ILoginLog>('LoginLog', LoginLogSchema);
 export default LoginLog;
