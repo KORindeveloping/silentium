@@ -24,6 +24,7 @@ const connectDB = async () => {
         console.log(`Virtual MongoDB Connected (In-Memory)`);
       }
     } else {
+      console.log(`Connecting to Cloud MongoDB: ${mongoUri.split('@')[1] || 'URL HIDDEN'}`);
       await mongoose.connect(mongoUri);
       console.log(`MongoDB Connected (Cloud)`);
     }

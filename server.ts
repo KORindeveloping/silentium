@@ -1,10 +1,13 @@
+import dotenv from 'dotenv';
+dotenv.config();
+console.log('DEBUG: MONGO_URI from env:', process.env.MONGO_URI ? 'FOUND' : 'MISSING');
+
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
 import { fileURLToPath } from 'url';
-import dotenv from 'dotenv';
 import connectDB from './server/config/db';
 
 import authRoutes from './server/routes/authRoutes';
@@ -17,8 +20,6 @@ import userRoutes from './server/routes/userRoutes';
 import commentRoutes from './server/routes/commentRoutes';
 import { errorHandler } from './server/middleware/errorMiddleware';
 import { asyncHandler } from './server/middleware/asyncHandler';
-
-dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
