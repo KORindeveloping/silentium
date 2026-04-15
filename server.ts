@@ -1,12 +1,12 @@
 import dotenv from 'dotenv';
 dotenv.config();
-console.log('DEBUG: MONGO_URI from env:', process.env.MONGO_URI ? 'FOUND' : 'MISSING');
 
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import connectDB from './server/config/db';
 
@@ -26,18 +26,17 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// Database connection management for Serverless
+// Database connection management for Serverless/Cloud
 let isConnected = false;
 let connectionPromise: Promise<void> | null = null;
 
 const ensureConnection = async () => {
   if (isConnected) return;
-  // Reuse an in-flight connection attempt to avoid race conditions
   if (!connectionPromise) {
     connectionPromise = connectDB()
       .then(() => { isConnected = true; })
       .catch((err) => {
-        connectionPromise = null; // Allow retry on next request
+        connectionPromise = null;
         console.error('DB Connection Error:', err);
         throw err;
       });
@@ -47,7 +46,7 @@ const ensureConnection = async () => {
 
 const isDev = process.env.NODE_ENV !== 'production';
 
-// 1. Security & Body Parsing (Synchronous)
+// 1. Security & Body Parsing
 if (isDev) {
   app.use((req, res, next) => {
     res.setHeader("Content-Security-Policy", "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src * ws: wss:;");
@@ -82,7 +81,16 @@ app.use(asyncHandler(async (req: any, res: any, next: any) => {
 }));
 
 // 3. Static Files
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+const uploadsPath = path.join(__dirname, 'uploads');
+if (!process.env.VERCEL && !fs.existsSync(uploadsPath)) {
+  try {
+    fs.mkdirSync(uploadsPath, { recursive: true });
+  } catch (err) {
+    console.error('Error creating uploads directory:', err);
+  }
+}
+
+app.use('/uploads', express.static(uploadsPath, {
   setHeaders: (res, filePath) => {
     if (path.extname(filePath).toLowerCase() === '.pdf') {
       res.setHeader('Content-Type', 'application/pdf');
@@ -90,7 +98,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
     }
   }
 }));
-// 4. API Routes (Synchronous Registration)
+
+// 4. API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/books', bookRoutes);
 app.use('/api/analytics', analyticsRoutes);
@@ -104,14 +113,7 @@ app.use('/api/comments', commentRoutes);
 app.use('/api/user', authRoutes);
 app.use('/api/documents', bookRoutes);
 
-// Register Error Handler synchronously after API routes
-app.use(errorHandler);
-
-import fs from 'fs';
-
-// ... rest of imports ...
-
-// 5. Frontend / Vite (Async part handled separately)
+// 5. Frontend / Vite
 const setupFrontend = async () => {
   if (isDev && !process.env.VERCEL) {
     try {
@@ -132,13 +134,15 @@ const setupFrontend = async () => {
         res.sendFile(path.join(distPath, 'index.html'));
       });
     } else {
-      console.warn('Production build directory "dist" not found. Falling back to API only mode.');
       app.get('*', (req, res, next) => {
         if (req.path.startsWith('/api')) return next();
         res.status(404).json({ message: 'The application is still initializing. Please wait a moment.' });
       });
     }
   }
+
+  // Error Handler must be after ALL routes (including Vite middlewares)
+  app.use(errorHandler);
 
   if (!process.env.VERCEL) {
     const PORT = Number(process.env.PORT) || 3000;
@@ -149,12 +153,8 @@ const setupFrontend = async () => {
   }
 };
 
-(async () => {
-  try {
-    await setupFrontend();
-  } catch (err) {
-    console.error('Fatal Initialization Error:', err);
-  }
-})();
+setupFrontend().catch((err) => {
+  console.error('Fatal Initialization Error:', err);
+});
 
 export default app;
