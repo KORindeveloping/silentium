@@ -111,7 +111,7 @@ export const Reader: React.FC = () => {
           {doc.fileUrl ? (
             <div className="flex flex-col items-center py-8 min-h-[600px] relative">
               <Document
-                file={`${window.location.origin}/${doc.fileUrl.replace(/\\/g, '/')}`}
+                file={doc.fileUrl.startsWith('http') ? doc.fileUrl : `${window.location.origin}/${doc.fileUrl.replace(/\\/g, '/').replace(/^\//, '')}`}
                 onLoadSuccess={onDocumentLoadSuccess}
                 loading={<div className="text-muted-gray animate-pulse p-20 uppercase tracking-[0.5em] text-[10px]">Initializing Reader...</div>}
                 className="shadow-2xl"
