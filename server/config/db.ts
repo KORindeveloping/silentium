@@ -25,8 +25,9 @@ const connectDB = async () => {
       }
     } else {
       try {
-        console.log(`Connecting to Cloud MongoDB: ${mongoUri.split('@')[1] || 'URL HIDDEN'}`);
-        await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 5000 });
+        const maskedUri = mongoUri.replace(/:([^@]+)@/, ':****@');
+        console.log(`ATTEMPTING CLOUD CONNECTION WITH: ${maskedUri}`);
+        await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 8000 });
         console.log(`MongoDB Connected (Cloud)`);
       } catch (err) {
         console.error('FULL MONGODB ERROR:', err);
