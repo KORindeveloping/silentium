@@ -24,9 +24,18 @@ const connectDB = async () => {
         console.log(`Virtual MongoDB Connected (In-Memory)`);
       }
     } else {
-      console.log(`Connecting to Cloud MongoDB: ${mongoUri.split('@')[1] || 'URL HIDDEN'}`);
-      await mongoose.connect(mongoUri);
-      console.log(`MongoDB Connected (Cloud)`);
+      try {
+        console.log(`Connecting to Cloud MongoDB: ${mongoUri.split('@')[1] || 'URL HIDDEN'}`);
+        await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 5000 });
+        console.log(`MongoDB Connected (Cloud)`);
+      } catch (err) {
+        console.error('Cloud MongoDB connection failed. Falling back to In-Memory MongoDB...', (err as Error).message);
+        const { MongoMemoryServer } = await import('mongodb-memory-server');
+        const mongoServer = await MongoMemoryServer.create();
+        mongoUri = mongoServer.getUri();
+        await mongoose.connect(mongoUri);
+        console.log(`Virtual MongoDB Connected (In-Memory)`);
+      }
     }
   } catch (error) {
     console.error(`MongoDB Connection Error: ${(error as Error).message}`);

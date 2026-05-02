@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export const errorHandler = (err: any, req: Request, res: Response, next: NextFunction) => {
   // Ensure we don't crash the error handler itself
   try {
@@ -38,5 +40,3 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
     }
   }
 };
-
-const isDev = process.env.NODE_ENV !== 'production';

@@ -16,7 +16,7 @@ export const toggleSaveBook = async (req: Request, res: Response) => {
     const book = await Book.findById(bookId);
     if (!book) return res.status(404).json({ message: 'Book not found' });
 
-    const isSaved = user.savedBooks.includes(bookId as any);
+    const isSaved = user.savedBooks.some(id => id.toString() === bookId);
 
     if (isSaved) {
       user.savedBooks = user.savedBooks.filter(id => id.toString() !== bookId);
@@ -46,7 +46,7 @@ export const toggleFollowUser = async (req: Request, res: Response) => {
     const targetUser = await User.findById(targetUserId);
     if (!currentUser || !targetUser) return res.status(404).json({ message: 'User not found' });
 
-    const isFollowing = currentUser.following.includes(targetUserId as any);
+    const isFollowing = currentUser.following.some(id => id.toString() === targetUserId);
 
     if (isFollowing) {
       currentUser.following = currentUser.following.filter(id => id.toString() !== targetUserId);
