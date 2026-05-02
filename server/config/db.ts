@@ -29,6 +29,7 @@ const connectDB = async () => {
         await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 5000 });
         console.log(`MongoDB Connected (Cloud)`);
       } catch (err) {
+        console.error('FULL MONGODB ERROR:', err);
         if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
           throw new Error(`DATABASE_CONNECTION_FAILED: Could not connect to your cloud MongoDB Atlas. Please check your MONGO_URI and Network Access (whitelist 0.0.0.0/0) in Atlas. Details: ${(err as Error).message}`);
         }
