@@ -18,6 +18,8 @@ services:
       - key: GEMINI_API_KEY
         sync: false
         placeholder: "Enter your Gemini API Key"
+      - key: UPLOADS_PATH
+        value: /opt/render/project/src/uploads
     disk:
       name: uploads
       mountPath: /opt/render/project/src/uploads
