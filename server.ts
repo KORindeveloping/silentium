@@ -1,3 +1,4 @@
+console.log('--- SERVER STARTING UP ---');
 import dotenv from 'dotenv';
 dotenv.config();
 
