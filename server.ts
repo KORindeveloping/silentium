@@ -59,7 +59,8 @@ if (isDev) {
       useDefaults: true,
       directives: {
         "default-src": ["'self'"],
-        "script-src": ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://unpkg.com"],
+        "script-src": ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://unpkg.com", "blob:"],
+        "worker-src": ["'self'", "blob:", "https://unpkg.com"],
         "style-src": ["'self'", "'unsafe-inline'"],
         "img-src": ["'self'", "data:", "blob:", "https://*"],
         "frame-src": ["'self'", "blob:"],
@@ -98,6 +99,12 @@ app.use('/uploads', express.static(uploadsPath, {
     }
   }
 }));
+
+// Debug 404s for uploads
+app.use('/uploads', (req, res) => {
+  console.error(`404: File not found at ${path.join(uploadsPath, req.path)}`);
+  res.status(404).send('File not found on server');
+});
 
 // 4. API Routes
 app.use('/api/auth', authRoutes);
