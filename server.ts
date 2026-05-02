@@ -85,7 +85,7 @@ app.use(asyncHandler(async (req: any, res: any, next: any) => {
 }));
 
 // 3. Static Files
-const uploadsPath = process.env.UPLOADS_PATH || path.join(__dirname, 'uploads');
+const uploadsPath = process.env.UPLOADS_PATH || path.join(process.cwd(), 'uploads');
 if (!process.env.VERCEL && !fs.existsSync(uploadsPath)) {
   try {
     fs.mkdirSync(uploadsPath, { recursive: true });
