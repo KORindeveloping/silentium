@@ -1,4 +1,3 @@
-console.log('--- SERVER STARTING UP ---');
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -46,9 +45,6 @@ const ensureConnection = async () => {
 };
 
 const isDev = process.env.NODE_ENV !== 'production' && !process.env.RENDER && !process.env.VERCEL;
-
-console.log(`Init: Mode = ${isDev ? 'Development' : 'Production'}`);
-console.log(`Init: Vercel = ${!!process.env.VERCEL}, Render = ${!!process.env.RENDER}`);
 
 // 1. Security & Body Parsing
 if (isDev) {
