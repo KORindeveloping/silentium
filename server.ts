@@ -111,8 +111,8 @@ app.use('/uploads', express.static(uploadsPath, {
 // Debug 404s for uploads
 app.get('/api/debug/uploads', (req, res) => {
   fs.readdir(uploadsPath, (err, files) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ path: uploadsPath, files });
+    if (err) return res.status(500).json({ error: err.message, path: uploadsPath, env: process.env.UPLOADS_PATH });
+    res.json({ path: uploadsPath, env: process.env.UPLOADS_PATH, files });
   });
 });
 
