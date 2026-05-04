@@ -118,7 +118,31 @@ export const Reader: React.FC = () => {
           {doc.fileUrl ? (
             <div className="flex flex-col items-center py-8 min-h-[600px] relative">
               <Document
-                file={doc.fileUrl.startsWith('http') ? doc.fileUrl : `${window.location.origin}${doc.fileUrl.startsWith('/') ? '' : '/'}${doc.fileUrl.replace(/\\/g, '/')}`}
+                file={(() => {
+                  if (!doc.fileUrl) return null; // Return null if no fileUrl is present
+                  
+                  // If doc.fileUrl is already an absolute URL, use it directly.
+                  if (doc.fileUrl.startsWith('http:') || doc.fileUrl.startsWith('https:')) {
+                    return doc.fileUrl;
+                  } else {
+                    // It's a relative path. Construct the full URL.
+                    const origin = window.location.origin;
+                    // Normalize Windows paths to use forward slashes.
+                    const normalizedPath = doc.fileUrl.replace(/\\/g, '/');
+                    
+                    // Ensure a single slash between origin and path.
+                    // If origin ends with '/', remove the leading '/' from normalizedPath.
+                    // If origin does not end with '/' and normalizedPath starts with '/', use it as is.
+                    // Otherwise, add a '/' if needed.
+                    if (origin.endsWith('/') && normalizedPath.startsWith('/')) {
+                      return `${origin}${normalizedPath.substring(1)}`;
+                    } else if (!origin.endsWith('/') && !normalizedPath.startsWith('/')) {
+                      return `${origin}/${normalizedPath}`;
+                    } else {
+                      return `${origin}${normalizedPath}`;
+                    }
+                  }
+                })()}
                 onLoadSuccess={onDocumentLoadSuccess}
                 onLoadError={onDocumentLoadError}
                 loading={<div className="text-muted-gray animate-pulse p-20 uppercase tracking-[0.5em] text-[10px]">Initializing Reader...</div>}
