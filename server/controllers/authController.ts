@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import User from '../models/User';
 import Author from '../models/Author';
 import LoginLog from '../models/LoginLog';
+import path from 'path';
 
 const generateToken = (id: string, rememberMe: boolean = false) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'secret', {
@@ -16,6 +17,19 @@ const validatePassword = (password: string) => {
          /[A-Z]/.test(password) && 
          /[0-9]/.test(password) && 
          /[^A-Za-z0-9]/.test(password);
+};
+
+const getFullUrl = (req: Request, filePath: string | undefined) => {
+  if (!filePath) return undefined;
+  if (filePath.startsWith('http')) return filePath;
+  
+  let normalizedPath = filePath;
+  if (path.isAbsolute(filePath)) {
+    normalizedPath = `uploads/${path.basename(filePath)}`;
+  }
+  
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  return `${baseUrl}/${normalizedPath.replace(/\\/g, '/').replace(/^\//, '')}`;
 };
 
 // @desc    Register a new user
@@ -148,7 +162,7 @@ export const getUserProfile = async (req: Request, res: Response, next: NextFunc
         phone: user.phone,
         bio: user.bio,
         location: user.location,
-        avatar: user.avatar,
+        avatar: getFullUrl(req, user.avatar),
         notificationPreferences: user.notificationPreferences,
         createdAt: user.createdAt,
       });
@@ -179,7 +193,7 @@ export const updateUserProfile = async (req: Request, res: Response, next: NextF
     });
     
     if (req.file) {
-      user.avatar = req.file.path.replace(/\\/g, '/');
+      user.avatar = `uploads/${req.file.filename}`;
     }
     
     if (req.body.notificationPreferences) {
@@ -215,7 +229,7 @@ export const updateUserProfile = async (req: Request, res: Response, next: NextF
       phone: updatedUser.phone,
       bio: updatedUser.bio,
       location: updatedUser.location,
-      avatar: updatedUser.avatar,
+      avatar: getFullUrl(req, updatedUser.avatar),
       notificationPreferences: updatedUser.notificationPreferences,
       token: generateToken((updatedUser._id as any).toString()),
     });

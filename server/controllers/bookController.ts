@@ -63,11 +63,18 @@ export const getBooks = async (req: Request, res: Response) => {
     .limit(pageSize)
     .skip(pageSize * (page - 1));
 
-  const getFullUrl = (req: Request, relativePath: string | undefined) => {
-    if (!relativePath) return undefined;
-    if (relativePath.startsWith('http')) return relativePath;
+  const getFullUrl = (req: Request, filePath: string | undefined) => {
+    if (!filePath) return undefined;
+    if (filePath.startsWith('http')) return filePath;
+    
+    // If it's an absolute path, extract just the filename and assume it's in uploads
+    let normalizedPath = filePath;
+    if (path.isAbsolute(filePath)) {
+      normalizedPath = `uploads/${path.basename(filePath)}`;
+    }
+    
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    return `${baseUrl}/${relativePath.replace(/\\/g, '/').replace(/^\//, '')}`;
+    return `${baseUrl}/${normalizedPath.replace(/\\/g, '/').replace(/^\//, '')}`;
   };
 
   const formattedBooks = books.map(book => {
@@ -111,11 +118,17 @@ export const getBookById = async (req: Request, res: Response) => {
     book.views += 1;
     await book.save();
 
-    const getFullUrl = (req: Request, relativePath: string | undefined) => {
-      if (!relativePath) return undefined;
-      if (relativePath.startsWith('http')) return relativePath;
+    const getFullUrl = (req: Request, filePath: string | undefined) => {
+      if (!filePath) return undefined;
+      if (filePath.startsWith('http')) return filePath;
+      
+      let normalizedPath = filePath;
+      if (path.isAbsolute(filePath)) {
+        normalizedPath = `uploads/${path.basename(filePath)}`;
+      }
+      
       const baseUrl = `${req.protocol}://${req.get('host')}`;
-      return `${baseUrl}/${relativePath.replace(/\\/g, '/').replace(/^\//, '')}`;
+      return `${baseUrl}/${normalizedPath.replace(/\\/g, '/').replace(/^\//, '')}`;
     };
 
     const b = book as any;
@@ -161,9 +174,8 @@ export const createBook = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Please provide either a file or write content.' });
     }
 
-    const coverImage = files?.['coverImage']?.[0]?.path?.replace(/\\/g, '/');
-    // Ensure fileUrl includes the 'uploads/' prefix for correct routing via express.static
-    const fileUrl = files?.['file']?.[0]?.path ? `uploads/${files?.['file']?.[0]?.path.replace(/\\/g, '/')}` : undefined;
+    const coverImage = files?.['coverImage']?.[0] ? `uploads/${files['coverImage'][0].filename}` : undefined;
+    const fileUrl = files?.['file']?.[0] ? `uploads/${files['file'][0].filename}` : undefined;
 
     const book = new Book({
       title,
