@@ -162,7 +162,8 @@ export const createBook = async (req: Request, res: Response) => {
     }
 
     const coverImage = files?.['coverImage']?.[0]?.path?.replace(/\\/g, '/');
-    const fileUrl = files?.['file']?.[0]?.path?.replace(/\\/g, '/');
+    // Ensure fileUrl includes the 'uploads/' prefix for correct routing via express.static
+    const fileUrl = files?.['file']?.[0]?.path ? `uploads/${files?.['file']?.[0]?.path.replace(/\\/g, '/')}` : undefined;
 
     const book = new Book({
       title,
