@@ -30,7 +30,9 @@ export const BookCard: React.FC<BookCardProps> = ({ book, isSkeleton, onQuickVie
     : null;
 
   const isPDF = book.fileUrl?.toLowerCase().endsWith('.pdf');
-  const normalizedFileUrl = book.fileUrl ? `/${book.fileUrl.replace(/\\/g, '/')}` : null;
+  const normalizedFileUrl = book.fileUrl 
+    ? (book.fileUrl.startsWith('http') ? book.fileUrl : `/${book.fileUrl.replace(/\\/g, '/')}`)
+    : null;
 
   return (
     <motion.div

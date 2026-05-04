@@ -125,7 +125,7 @@ export const Profile = () => {
       
       // Append text fields
       Object.entries(formData).forEach(([key, value]) => {
-        formDataToSend.append(key, value);
+        formDataToSend.append(key, value as string);
       });
 
       // Append notifications
@@ -169,7 +169,7 @@ export const Profile = () => {
     try {
       const token = localStorage.getItem('token');
       const res = await fetch('/api/auth/profile', {
-        method: DELETE,
+        method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {

@@ -1,42 +1,62 @@
-import axios from 'axios';
 
 const API_URL = 'http://localhost:3000/api';
 
 const verify = async () => {
   try {
     console.log('--- Verifying Registration ---');
-    const registerRes = await axios.post(`${API_URL}/auth/register`, {
-      email: `test-${Date.now()}@example.com`,
-      password: 'Password123!',
-      role: 'author'
+    const registerRes = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: `test-${Date.now()}@example.com`,
+        password: 'Password123!',
+        role: 'author'
+      })
     });
-    console.log('Registration Success:', registerRes.data);
+    const registerData = await registerRes.json();
+    if (!registerRes.ok) throw { response: { status: registerRes.status, data: registerData } };
+    console.log('Registration Success:', registerData);
 
-    const token = registerRes.data.token;
+    const token = registerData.token;
 
     console.log('\n--- Verifying Profile Access ---');
-    const profileRes = await axios.get(`${API_URL}/auth/me`, {
+    const profileRes = await fetch(`${API_URL}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    console.log('Profile Success:', profileRes.data.email);
+    const profileData = await profileRes.json();
+    if (!profileRes.ok) throw { response: { status: profileRes.status, data: profileData } };
+    console.log('Profile Success:', profileData.email);
 
     console.log('\n--- Verifying Login ---');
-    const loginRes = await axios.post(`${API_URL}/auth/login`, {
-      email: registerRes.data.email,
-      password: 'Password123!'
+    const loginRes = await fetch(`${API_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: registerData.email,
+        password: 'Password123!'
+      })
     });
-    console.log('Login Success:', loginRes.data.email);
+    const loginData = await loginRes.json();
+    if (!loginRes.ok) throw { response: { status: loginRes.status, data: loginData } };
+    console.log('Login Success:', loginData.email);
 
     console.log('\n--- Verifying Book Creation ---');
-    const bookRes = await axios.post(`${API_URL}/books`, {
-      title: 'Test Book',
-      description: 'Test Description',
-      category: 'Guides',
-      content: 'This is a test book content.'
-    }, {
-      headers: { Authorization: `Bearer ${token}` }
+    const bookRes = await fetch(`${API_URL}/books`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}` 
+      },
+      body: JSON.stringify({
+        title: 'Test Book',
+        description: 'Test Description',
+        category: 'Guides',
+        content: 'This is a test book content.'
+      })
     });
-    console.log('Book Creation Success:', bookRes.data.title);
+    const bookData = await bookRes.json();
+    if (!bookRes.ok) throw { response: { status: bookRes.status, data: bookData } };
+    console.log('Book Creation Success:', bookData.title);
 
     console.log('\n--- ALL VERIFICATIONS PASSED ---');
   } catch (error: any) {
@@ -45,7 +65,7 @@ const verify = async () => {
       console.error('Status:', error.response.status);
       console.error('Data:', error.response.data);
     } else {
-      console.error('Error:', error.message);
+      console.error('Error:', error.message || error);
     }
     process.exit(1);
   }
