@@ -126,7 +126,6 @@ export const Reader: React.FC = () => {
                   <div className="text-center p-20">
                     <p className="text-red-400 uppercase tracking-widest text-xs mb-4">Failed to load PDF</p>
                     <p className="text-muted-gray text-[10px] max-w-xs mx-auto">{error || 'Unknown error occurred while loading the document.'}</p>
-                    <p className="text-[10px] text-muted-gray/40 mt-4 break-all">Attempted URL: {doc.fileUrl.startsWith('http') ? doc.fileUrl : `${window.location.origin}${doc.fileUrl.startsWith('/') ? '' : '/'}${doc.fileUrl.replace(/\\/g, '/')}`}</p>
                     <button 
                       onClick={() => window.location.reload()}
                       className="mt-6 px-6 py-2 bg-white/5 border border-white/10 rounded-full text-[10px] uppercase tracking-widest hover:bg-white/10 transition-all"
