@@ -109,6 +109,13 @@ app.use('/uploads', express.static(uploadsPath, {
 }));
 
 // Debug 404s for uploads
+app.get('/api/debug/uploads', (req, res) => {
+  fs.readdir(uploadsPath, (err, files) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ path: uploadsPath, files });
+  });
+});
+
 app.use('/uploads', (req, res) => {
   console.error(`404: File not found at ${path.join(uploadsPath, req.path)}`);
   res.status(404).send('File not found on server');
