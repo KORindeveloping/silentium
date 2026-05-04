@@ -63,6 +63,13 @@ export const getBooks = async (req: Request, res: Response) => {
     .limit(pageSize)
     .skip(pageSize * (page - 1));
 
+  const getFullUrl = (req: Request, relativePath: string | undefined) => {
+    if (!relativePath) return undefined;
+    if (relativePath.startsWith('http')) return relativePath;
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    return `${baseUrl}/${relativePath.replace(/\\/g, '/').replace(/^\//, '')}`;
+  };
+
   const formattedBooks = books.map(book => {
     const b = book as any;
     return {
@@ -74,11 +81,11 @@ export const getBooks = async (req: Request, res: Response) => {
       author: {
         _id: b.authorId?._id,
         name: b.authorId?.name || b.authorId?.email?.split('@')[0] || 'Unknown',
-        avatar: b.authorId?.avatar,
+        avatar: getFullUrl(req, b.authorId?.avatar),
         credits: b.authorId?.credits
       },
-      coverImage: b.coverImage,
-      fileUrl: b.fileUrl,
+      coverImage: getFullUrl(req, b.coverImage),
+      fileUrl: getFullUrl(req, b.fileUrl),
       content: b.content,
       pageCount: b.pageCount,
       views: b.views,
@@ -104,6 +111,13 @@ export const getBookById = async (req: Request, res: Response) => {
     book.views += 1;
     await book.save();
 
+    const getFullUrl = (req: Request, relativePath: string | undefined) => {
+      if (!relativePath) return undefined;
+      if (relativePath.startsWith('http')) return relativePath;
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      return `${baseUrl}/${relativePath.replace(/\\/g, '/').replace(/^\//, '')}`;
+    };
+
     const b = book as any;
     res.json({
       _id: b._id,
@@ -114,11 +128,11 @@ export const getBookById = async (req: Request, res: Response) => {
       author: {
         _id: b.authorId?._id,
         name: b.authorId?.name || b.authorId?.email?.split('@')[0] || 'Unknown',
-        avatar: b.authorId?.avatar,
+        avatar: getFullUrl(req, b.authorId?.avatar),
         credits: b.authorId?.credits
       },
-      coverImage: b.coverImage,
-      fileUrl: b.fileUrl,
+      coverImage: getFullUrl(req, b.coverImage),
+      fileUrl: getFullUrl(req, b.fileUrl),
       content: b.content,
       pageCount: b.pageCount,
       views: b.views,

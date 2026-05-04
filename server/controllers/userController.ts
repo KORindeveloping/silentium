@@ -80,9 +80,32 @@ export const getUserLibrary = async (req: Request, res: Response) => {
 
     if (!user) return res.status(404).json({ message: 'User not found' });
 
+    const getFullUrl = (req: Request, relativePath: string | undefined) => {
+      if (!relativePath) return undefined;
+      if (relativePath.startsWith('http')) return relativePath;
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      return `${baseUrl}/${relativePath.replace(/\\/g, '/').replace(/^\//, '')}`;
+    };
+
+    const formatBook = (book: any) => ({
+      ...book._doc,
+      coverImage: getFullUrl(req, book.coverImage),
+      fileUrl: getFullUrl(req, book.fileUrl),
+      authorId: book.authorId ? {
+        ...book.authorId._doc,
+        avatar: getFullUrl(req, book.authorId.avatar)
+      } : undefined
+    });
+
     res.json({
-      saved: user.savedBooks,
-      history: user.history.sort((a: any, b: any) => new Date(b.lastRead).getTime() - new Date(a.lastRead).getTime())
+      saved: user.savedBooks.map((b: any) => formatBook(b)),
+      history: user.history
+        .filter((h: any) => h.bookId)
+        .map((h: any) => ({
+          ...h._doc,
+          bookId: formatBook(h.bookId)
+        }))
+        .sort((a: any, b: any) => new Date(b.lastRead).getTime() - new Date(a.lastRead).getTime())
     });
   } catch (error: any) {
     res.status(400).json({ message: error.message });

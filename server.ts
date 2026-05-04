@@ -63,16 +63,22 @@ if (isDev) {
         "worker-src": ["'self'", "blob:", "https://unpkg.com"],
         "style-src": ["'self'", "'unsafe-inline'"],
         "img-src": ["'self'", "data:", "blob:", "https://*"],
-        "frame-src": ["'self'", "blob:"],
+        "frame-src": ["'self'", "blob:", "*"], // Allow framing from anywhere if needed
         "object-src": ["'self'", "blob:"],
-        "connect-src": ["'self'", "blob:", "https://unpkg.com"],
+        "connect-src": ["'self'", "blob:", "https://unpkg.com", "*"],
       },
     },
     crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow cross-origin access to resources
+    crossOriginOpenerPolicy: false,
   }));
 }
 
-app.use(cors());
+app.use(cors({
+  origin: '*', // Allow all origins
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // 2. Ensure DB connection for every request
@@ -93,6 +99,8 @@ if (!process.env.VERCEL && !fs.existsSync(uploadsPath)) {
 
 app.use('/uploads', express.static(uploadsPath, {
   setHeaders: (res, filePath) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     if (path.extname(filePath).toLowerCase() === '.pdf') {
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', 'inline');
