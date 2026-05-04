@@ -8,7 +8,7 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
 // Configure PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 export const Reader: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -19,6 +19,7 @@ export const Reader: React.FC = () => {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [scale, setScale] = useState<number>(1.2);
+  const [error, setError] = useState<string | null>(null);
 
   // Growth Strategy: Limit preview pages for non-premium/no-credit users
   const PREVIEW_LIMIT = 3;
@@ -58,6 +59,12 @@ export const Reader: React.FC = () => {
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
+    setError(null);
+  }
+
+  function onDocumentLoadError(error: Error) {
+    console.error('PDF Load Error:', error);
+    setError(error.message);
   }
 
   const handleNextPage = () => {
@@ -111,9 +118,23 @@ export const Reader: React.FC = () => {
           {doc.fileUrl ? (
             <div className="flex flex-col items-center py-8 min-h-[600px] relative">
               <Document
-                file={doc.fileUrl.startsWith('http') ? doc.fileUrl : `${window.location.origin}/${doc.fileUrl.replace(/\\/g, '/').replace(/^\//, '')}`}
+                file={doc.fileUrl.startsWith('http') ? doc.fileUrl : `${window.location.origin}${doc.fileUrl.startsWith('/') ? '' : '/'}${doc.fileUrl.replace(/\\/g, '/')}`}
                 onLoadSuccess={onDocumentLoadSuccess}
+                onLoadError={onDocumentLoadError}
                 loading={<div className="text-muted-gray animate-pulse p-20 uppercase tracking-[0.5em] text-[10px]">Initializing Reader...</div>}
+                error={
+                  <div className="text-center p-20">
+                    <p className="text-red-400 uppercase tracking-widest text-xs mb-4">Failed to load PDF</p>
+                    <p className="text-muted-gray text-[10px] max-w-xs mx-auto">{error || 'Unknown error occurred while loading the document.'}</p>
+                    <p className="text-[10px] text-muted-gray/40 mt-4 break-all">Attempted URL: {doc.fileUrl.startsWith('http') ? doc.fileUrl : `${window.location.origin}${doc.fileUrl.startsWith('/') ? '' : '/'}${doc.fileUrl.replace(/\\/g, '/')}`}</p>
+                    <button 
+                      onClick={() => window.location.reload()}
+                      className="mt-6 px-6 py-2 bg-white/5 border border-white/10 rounded-full text-[10px] uppercase tracking-widest hover:bg-white/10 transition-all"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                }
                 className="shadow-2xl"
               >
                 <Page 
