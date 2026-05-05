@@ -87,39 +87,7 @@ app.use(asyncHandler(async (req: any, res: any, next: any) => {
   next();
 }));
 
-// 3. Static Files
-const uploadsPath = process.env.UPLOADS_PATH || path.join(process.cwd(), 'uploads');
-if (!process.env.VERCEL && !fs.existsSync(uploadsPath)) {
-  try {
-    fs.mkdirSync(uploadsPath, { recursive: true });
-  } catch (err) {
-    console.error('Error creating uploads directory:', err);
-  }
-}
-
-app.use('/uploads', express.static(uploadsPath, {
-  setHeaders: (res, filePath) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    if (path.extname(filePath).toLowerCase() === '.pdf') {
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', 'inline');
-    }
-  }
-}));
-
-// Debug 404s for uploads
-app.get('/api/debug/uploads', (req, res) => {
-  fs.readdir(uploadsPath, (err, files) => {
-    if (err) return res.status(500).json({ error: err.message, path: uploadsPath, env: process.env.UPLOADS_PATH });
-    res.json({ path: uploadsPath, env: process.env.UPLOADS_PATH, files });
-  });
-});
-
-app.use('/uploads', (req, res) => {
-  console.error(`404: File not found at ${path.join(uploadsPath, req.path)}`);
-  res.status(404).send('File not found on server');
-});
+// 3. Static Files (Cloudinary used instead)
 
 // 4. API Routes
 app.use('/api/auth', authRoutes);
