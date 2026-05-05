@@ -126,8 +126,8 @@ export const Reader: React.FC = () => {
                     return doc.fileUrl;
                   } else {
                     const baseUrl = (API_BASE_URL || window.location.origin).replace(/\/$/, '');
-                    const normalizedPath = doc.fileUrl.startsWith('/') ? doc.fileUrl : `/${doc.fileUrl}`;
-                    return `${baseUrl}${normalizedPath}`;
+                    const cleanPath = doc.fileUrl.startsWith('/') ? doc.fileUrl.substring(1) : doc.fileUrl;
+                    return `${baseUrl}/${cleanPath}`;
                   }
                 })()}
                 onLoadSuccess={onDocumentLoadSuccess}
