@@ -1,7 +1,63 @@
 import { Request, Response } from 'express';
 import Book from '../models/Book';
 import User from '../models/User';
-import path from 'path';
+import { uploadToCloudinary } from '../utils/cloudinaryHelper';
+
+// @desc    Create a book
+// @route   POST /api/books
+// @access  Private/Author
+export const createBook = async (req: Request, res: Response) => {
+  try {
+    const { title, description, category, tags, visibility, content, readingMinutes, pageCount } = req.body;
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+
+    if (!files?.['file'] && !content) {
+      return res.status(400).json({ message: 'Please provide either a file or write content.' });
+    }
+
+    let fileUrl: string | undefined;
+    let coverImageUrl: string | undefined;
+
+    // Upload File (PDF/Doc)
+    if (files?.['file']?.[0]) {
+      const result = await uploadToCloudinary(files['file'][0].buffer, 'books/files', 'raw');
+      fileUrl = result.secure_url;
+    }
+
+    // Upload Cover Image
+    if (files?.['coverImage']?.[0]) {
+      const result = await uploadToCloudinary(files['coverImage'][0].buffer, 'books/covers', 'image');
+      coverImageUrl = result.secure_url;
+    }
+
+    const book = new Book({
+      title,
+      authorId: (req as any).user._id,
+      description,
+      category,
+      tags: tags ? (typeof tags === 'string' ? tags.split(',').map((t: string) => t.trim()) : tags) : [],
+      fileUrl,
+      coverImage: coverImageUrl,
+      content,
+      pageCount: pageCount || 0,
+      visibility: visibility || 'public',
+      status: 'published',
+      readingMinutes: readingMinutes || 5,
+    });
+
+    const createdBook = await book.save();
+
+    if (fileUrl || content) {
+      await User.findByIdAndUpdate((req as any).user._id, {
+        $inc: { credits: 3 }
+      });
+    }
+
+    res.status(201).json(createdBook);
+  } catch (error: any) {
+    res.status(400).json({ message: error.message });
+  }
+};
 
 // @desc    Get all books
 // @route   GET /api/books
@@ -9,11 +65,9 @@ import path from 'path';
 export const getBooks = async (req: Request, res: Response) => {
   const pageSize = Number(req.query.limit) || 12;
   const page = Number(req.query.page) || 1;
-  const sortBy = req.query.sort || 'latest'; // latest, popular, trending
+  const sortBy = req.query.sort || 'latest';
 
   const query: any = {};
-
-  // Search
   if (req.query.q) {
     query.$or = [
       { title: { $regex: req.query.q, $options: 'i' } },
@@ -21,40 +75,27 @@ export const getBooks = async (req: Request, res: Response) => {
       { tags: { $regex: req.query.q, $options: 'i' } }
     ];
   }
-
-  // Filter by Category
   if (req.query.category && req.query.category !== 'All') {
     query.category = req.query.category;
   }
-
-  // Filter by Author (for Library/Dashboard)
   if (req.query.authorId) {
     const authorId = req.query.authorId as string;
     if (/^[0-9a-fA-F]{24}$/.test(authorId)) {
       query.authorId = authorId;
     }
   }
-
-  // Filter by Status (default: approved/published for public, all for author)
   if (req.query.status) {
     query.status = req.query.status;
   } else if (!req.query.authorId) {
-    query.status = 'published'; // Public view shows published only
+    query.status = 'published';
   }
-
-  // Filter by Visibility (default: public)
   if (!req.query.authorId) {
     query.visibility = 'public';
   }
 
-  // Sorting
   let sortOptions: any = { createdAt: -1 };
-  if (sortBy === 'popular') {
-    sortOptions = { views: -1 };
-  } else if (sortBy === 'trending') {
-    // Basic trending: views + likes (if we had complex trending logic, it'd go here)
-    sortOptions = { views: -1, createdAt: -1 }; 
-  }
+  if (sortBy === 'popular') sortOptions = { views: -1 };
+  else if (sortBy === 'trending') sortOptions = { views: -1, createdAt: -1 };
 
   const count = await Book.countDocuments(query);
   const books = await Book.find(query)
@@ -62,15 +103,6 @@ export const getBooks = async (req: Request, res: Response) => {
     .sort(sortOptions)
     .limit(pageSize)
     .skip(pageSize * (page - 1));
-
-  const getFullUrl = (filePath: string | undefined) => {
-    if (!filePath) return undefined;
-    if (filePath.startsWith('http')) return filePath;
-
-    // Ensure the path is just the filename or starts with 'uploads/'
-    const filename = path.basename(filePath);
-    return `/uploads/${filename}`;
-  };
 
   const formattedBooks = books.map(book => {
     const b = book as any;
@@ -83,11 +115,11 @@ export const getBooks = async (req: Request, res: Response) => {
       author: {
         _id: b.authorId?._id,
         name: b.authorId?.name || b.authorId?.email?.split('@')[0] || 'Unknown',
-        avatar: getFullUrl(b.authorId?.avatar),
+        avatar: b.authorId?.avatar, // Already full URL
         credits: b.authorId?.credits
       },
-      coverImage: getFullUrl(b.coverImage),
-      fileUrl: getFullUrl(b.fileUrl),
+      coverImage: b.coverImage, // Already full URL
+      fileUrl: b.fileUrl,       // Already full URL
       content: b.content,
       pageCount: b.pageCount,
       views: b.views,
@@ -109,17 +141,8 @@ export const getBookById = async (req: Request, res: Response) => {
   const book = await Book.findById(req.params.id).populate('authorId', 'name email avatar credits');
 
   if (book) {
-    // Increment view count
     book.views += 1;
     await book.save();
-
-    const getFullUrl = (filePath: string | undefined) => {
-      if (!filePath) return undefined;
-      if (filePath.startsWith('http')) return filePath;
-      
-      const filename = path.basename(filePath);
-      return `/uploads/${filename}`;
-    };
 
     const b = book as any;
     res.json({
@@ -131,11 +154,11 @@ export const getBookById = async (req: Request, res: Response) => {
       author: {
         _id: b.authorId?._id,
         name: b.authorId?.name || b.authorId?.email?.split('@')[0] || 'Unknown',
-        avatar: getFullUrl(b.authorId?.avatar),
+        avatar: b.authorId?.avatar,
         credits: b.authorId?.credits
       },
-      coverImage: getFullUrl(b.coverImage),
-      fileUrl: getFullUrl(b.fileUrl),
+      coverImage: b.coverImage,
+      fileUrl: b.fileUrl,
       content: b.content,
       pageCount: b.pageCount,
       views: b.views,
@@ -150,56 +173,6 @@ export const getBookById = async (req: Request, res: Response) => {
     res.status(404).json({ message: 'Book not found' });
   }
 };
-
-// @desc    Create a book
-// @route   POST /api/books
-// @access  Private/Author
-export const createBook = async (req: Request, res: Response) => {
-  try {
-    const { title, description, category, tags, visibility, content, readingMinutes, pageCount } = req.body;
-    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-
-    // Validation: Require either file or content
-    if (!files?.['file'] && !content) {
-      return res.status(400).json({ message: 'Please provide either a file or write content.' });
-    }
-
-    const coverImage = files?.['coverImage']?.[0] ? `uploads/${files['coverImage'][0].filename}` : undefined;
-    const fileUrl = files?.['file']?.[0] ? `uploads/${files['file'][0].filename}` : undefined;
-
-    const book = new Book({
-      title,
-      authorId: (req as any).user._id,
-      description,
-      category,
-      tags: tags ? tags.split(',').map((t: string) => t.trim()) : [],
-      fileUrl,
-      coverImage,
-      content,
-      pageCount: pageCount || 0,
-      visibility: visibility || 'public',
-      status: 'published', // Auto-publish for MVP
-      readingMinutes: readingMinutes || 5, // Default or calculated on frontend
-    });
-
-    const createdBook = await book.save();
-
-    // Give to Get: Grant 3 credits for a successful contribution (file or content)
-    if (fileUrl || content) {
-      await User.findByIdAndUpdate((req as any).user._id, {
-        $inc: { credits: 3 }
-      });
-    }
-
-    res.status(201).json(createdBook);
-  } catch (error: any) {
-    res.status(400).json({ message: error.message });
-  }
-};
-
-// @desc    Update a book
-// @route   PUT /api/books/:id
-// @access  Private/Author
 export const updateBook = async (req: Request, res: Response) => {
   const { title, description, category, tags, visibility, status } = req.body;
 

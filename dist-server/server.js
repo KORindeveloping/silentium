@@ -1,11 +1,11 @@
 // server.ts
-import dotenv from "dotenv";
+import dotenv2 from "dotenv";
 import express9 from "express";
 import { createServer as createViteServer } from "vite";
-import path2 from "path";
+import path3 from "path";
 import cors from "cors";
 import helmet from "helmet";
-import fs2 from "fs";
+import fs from "fs";
 import { fileURLToPath } from "url";
 
 // server/config/db.ts
@@ -188,6 +188,7 @@ var LoginLog = mongoose4.models.LoginLog || mongoose4.model("LoginLog", LoginLog
 var LoginLog_default = LoginLog;
 
 // server/controllers/authController.ts
+import path from "path";
 var generateToken = (id, rememberMe = false) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || "secret", {
     expiresIn: rememberMe ? "30d" : "24h"
@@ -195,6 +196,16 @@ var generateToken = (id, rememberMe = false) => {
 };
 var validatePassword = (password) => {
   return password.length >= 8 && /[A-Z]/.test(password) && /[0-9]/.test(password) && /[^A-Za-z0-9]/.test(password);
+};
+var getFullUrl = (req, filePath) => {
+  if (!filePath) return void 0;
+  if (filePath.startsWith("http")) return filePath;
+  let normalizedPath = filePath;
+  if (path.isAbsolute(filePath)) {
+    normalizedPath = `uploads/${path.basename(filePath)}`;
+  }
+  const baseUrl = `${req.protocol}://${req.get("host")}`;
+  return `${baseUrl}/${normalizedPath.replace(/\\/g, "/").replace(/^\//, "")}`;
 };
 var registerUser = async (req, res, next) => {
   try {
@@ -303,7 +314,7 @@ var getUserProfile = async (req, res, next) => {
         phone: user.phone,
         bio: user.bio,
         location: user.location,
-        avatar: user.avatar,
+        avatar: getFullUrl(req, user.avatar),
         notificationPreferences: user.notificationPreferences,
         createdAt: user.createdAt
       });
@@ -327,7 +338,7 @@ var updateUserProfile = async (req, res, next) => {
       }
     });
     if (req.file) {
-      user.avatar = req.file.path.replace(/\\/g, "/");
+      user.avatar = `uploads/${req.file.filename}`;
     }
     if (req.body.notificationPreferences) {
       try {
@@ -356,7 +367,7 @@ var updateUserProfile = async (req, res, next) => {
       phone: updatedUser.phone,
       bio: updatedUser.bio,
       location: updatedUser.location,
-      avatar: updatedUser.avatar,
+      avatar: getFullUrl(req, updatedUser.avatar),
       notificationPreferences: updatedUser.notificationPreferences,
       token: generateToken(updatedUser._id.toString())
     });
@@ -426,34 +437,26 @@ var author = (req, res, next) => {
 
 // server/middleware/uploadMiddleware.ts
 import multer from "multer";
-import path from "path";
-import fs from "fs";
-var storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = process.env.UPLOADS_PATH || path.join(process.cwd(), "uploads");
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${file.fieldname}-${Date.now()}${path.extname(file.originalname)}`);
-  }
-});
+import path2 from "path";
+var storage = multer.memoryStorage();
 function checkFileType(file, cb) {
-  const filetypes = /pdf|doc|docx|epub|jpg|jpeg|png/;
-  const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+  const filetypes = /pdf|doc|docx|epub|jpg|jpeg|png|webp/;
+  const extname = filetypes.test(path2.extname(file.originalname).toLowerCase());
   const mimetype = filetypes.test(file.mimetype);
   if (extname && mimetype) {
     return cb(null, true);
   } else {
-    cb(new Error("Images and Documents Only!"));
+    cb(new Error("Invalid file type. Only PDFs, Documents, and Images are allowed."));
   }
 }
 var upload = multer({
   storage,
   fileFilter: (req, file, cb) => {
     checkFileType(file, cb);
+  },
+  limits: {
+    fileSize: 50 * 1024 * 1024
+    // 50MB limit
   }
 });
 var uploadMiddleware_default = upload;
@@ -552,7 +555,79 @@ BookSchema.index({ title: "text", description: "text", tags: "text" });
 var Book = mongoose5.models.Book || mongoose5.model("Book", BookSchema);
 var Book_default = Book;
 
+// server/config/cloudinary.ts
+import { v2 as cloudinary } from "cloudinary";
+import dotenv from "dotenv";
+dotenv.config();
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+var cloudinary_default = cloudinary;
+
+// server/utils/cloudinaryHelper.ts
+import streamifier from "streamifier";
+var uploadToCloudinary = (buffer, folder, resourceType = "auto") => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary_default.uploader.upload_stream(
+      {
+        folder,
+        resource_type: resourceType
+      },
+      (error, result) => {
+        if (error) return reject(error);
+        if (!result) return reject(new Error("Cloudinary upload failed"));
+        resolve(result);
+      }
+    );
+    streamifier.createReadStream(buffer).pipe(uploadStream);
+  });
+};
+
 // server/controllers/bookController.ts
+var createBook = async (req, res) => {
+  try {
+    const { title, description, category, tags, visibility, content, readingMinutes, pageCount } = req.body;
+    const files = req.files;
+    if (!files?.["file"] && !content) {
+      return res.status(400).json({ message: "Please provide either a file or write content." });
+    }
+    let fileUrl;
+    let coverImageUrl;
+    if (files?.["file"]?.[0]) {
+      const result = await uploadToCloudinary(files["file"][0].buffer, "books/files", "raw");
+      fileUrl = result.secure_url;
+    }
+    if (files?.["coverImage"]?.[0]) {
+      const result = await uploadToCloudinary(files["coverImage"][0].buffer, "books/covers", "image");
+      coverImageUrl = result.secure_url;
+    }
+    const book = new Book_default({
+      title,
+      authorId: req.user._id,
+      description,
+      category,
+      tags: tags ? typeof tags === "string" ? tags.split(",").map((t) => t.trim()) : tags : [],
+      fileUrl,
+      coverImage: coverImageUrl,
+      content,
+      pageCount: pageCount || 0,
+      visibility: visibility || "public",
+      status: "published",
+      readingMinutes: readingMinutes || 5
+    });
+    const createdBook = await book.save();
+    if (fileUrl || content) {
+      await User_default.findByIdAndUpdate(req.user._id, {
+        $inc: { credits: 3 }
+      });
+    }
+    res.status(201).json(createdBook);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
 var getBooks = async (req, res) => {
   const pageSize = Number(req.query.limit) || 12;
   const page = Number(req.query.page) || 1;
@@ -583,19 +658,10 @@ var getBooks = async (req, res) => {
     query.visibility = "public";
   }
   let sortOptions = { createdAt: -1 };
-  if (sortBy === "popular") {
-    sortOptions = { views: -1 };
-  } else if (sortBy === "trending") {
-    sortOptions = { views: -1, createdAt: -1 };
-  }
+  if (sortBy === "popular") sortOptions = { views: -1 };
+  else if (sortBy === "trending") sortOptions = { views: -1, createdAt: -1 };
   const count = await Book_default.countDocuments(query);
   const books = await Book_default.find(query).populate("authorId", "name email avatar credits").sort(sortOptions).limit(pageSize).skip(pageSize * (page - 1));
-  const getFullUrl = (req2, relativePath) => {
-    if (!relativePath) return void 0;
-    if (relativePath.startsWith("http")) return relativePath;
-    const baseUrl = `${req2.protocol}://${req2.get("host")}`;
-    return `${baseUrl}/${relativePath.replace(/\\/g, "/").replace(/^\//, "")}`;
-  };
   const formattedBooks = books.map((book) => {
     const b = book;
     return {
@@ -607,11 +673,14 @@ var getBooks = async (req, res) => {
       author: {
         _id: b.authorId?._id,
         name: b.authorId?.name || b.authorId?.email?.split("@")[0] || "Unknown",
-        avatar: getFullUrl(req, b.authorId?.avatar),
+        avatar: b.authorId?.avatar,
+        // Already full URL
         credits: b.authorId?.credits
       },
-      coverImage: getFullUrl(req, b.coverImage),
-      fileUrl: getFullUrl(req, b.fileUrl),
+      coverImage: b.coverImage,
+      // Already full URL
+      fileUrl: b.fileUrl,
+      // Already full URL
       content: b.content,
       pageCount: b.pageCount,
       views: b.views,
@@ -629,12 +698,6 @@ var getBookById = async (req, res) => {
   if (book) {
     book.views += 1;
     await book.save();
-    const getFullUrl = (req2, relativePath) => {
-      if (!relativePath) return void 0;
-      if (relativePath.startsWith("http")) return relativePath;
-      const baseUrl = `${req2.protocol}://${req2.get("host")}`;
-      return `${baseUrl}/${relativePath.replace(/\\/g, "/").replace(/^\//, "")}`;
-    };
     const b = book;
     res.json({
       _id: b._id,
@@ -645,11 +708,11 @@ var getBookById = async (req, res) => {
       author: {
         _id: b.authorId?._id,
         name: b.authorId?.name || b.authorId?.email?.split("@")[0] || "Unknown",
-        avatar: getFullUrl(req, b.authorId?.avatar),
+        avatar: b.authorId?.avatar,
         credits: b.authorId?.credits
       },
-      coverImage: getFullUrl(req, b.coverImage),
-      fileUrl: getFullUrl(req, b.fileUrl),
+      coverImage: b.coverImage,
+      fileUrl: b.fileUrl,
       content: b.content,
       pageCount: b.pageCount,
       views: b.views,
@@ -662,42 +725,6 @@ var getBookById = async (req, res) => {
     });
   } else {
     res.status(404).json({ message: "Book not found" });
-  }
-};
-var createBook = async (req, res) => {
-  try {
-    const { title, description, category, tags, visibility, content, readingMinutes, pageCount } = req.body;
-    const files = req.files;
-    if (!files?.["file"] && !content) {
-      return res.status(400).json({ message: "Please provide either a file or write content." });
-    }
-    const coverImage = files?.["coverImage"]?.[0]?.path?.replace(/\\/g, "/");
-    const fileUrl = files?.["file"]?.[0]?.path?.replace(/\\/g, "/");
-    const book = new Book_default({
-      title,
-      authorId: req.user._id,
-      description,
-      category,
-      tags: tags ? tags.split(",").map((t) => t.trim()) : [],
-      fileUrl,
-      coverImage,
-      content,
-      pageCount: pageCount || 0,
-      visibility: visibility || "public",
-      status: "published",
-      // Auto-publish for MVP
-      readingMinutes: readingMinutes || 5
-      // Default or calculated on frontend
-    });
-    const createdBook = await book.save();
-    if (fileUrl || content) {
-      await User_default.findByIdAndUpdate(req.user._id, {
-        $inc: { credits: 3 }
-      });
-    }
-    res.status(201).json(createdBook);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
   }
 };
 var updateBook = async (req, res) => {
@@ -1239,7 +1266,7 @@ var getUserLibrary = async (req, res) => {
       populate: { path: "authorId", select: "name email avatar" }
     });
     if (!user) return res.status(404).json({ message: "User not found" });
-    const getFullUrl = (req2, relativePath) => {
+    const getFullUrl2 = (req2, relativePath) => {
       if (!relativePath) return void 0;
       if (relativePath.startsWith("http")) return relativePath;
       const baseUrl = `${req2.protocol}://${req2.get("host")}`;
@@ -1247,11 +1274,11 @@ var getUserLibrary = async (req, res) => {
     };
     const formatBook = (book) => ({
       ...book._doc,
-      coverImage: getFullUrl(req, book.coverImage),
-      fileUrl: getFullUrl(req, book.fileUrl),
+      coverImage: getFullUrl2(req, book.coverImage),
+      fileUrl: getFullUrl2(req, book.fileUrl),
       authorId: book.authorId ? {
         ...book.authorId._doc,
-        avatar: getFullUrl(req, book.authorId.avatar)
+        avatar: getFullUrl2(req, book.authorId.avatar)
       } : void 0
     });
     res.json({
@@ -1386,9 +1413,9 @@ var errorHandler = (err, req, res, next) => {
 };
 
 // server.ts
-dotenv.config();
+dotenv2.config();
 var __filename = fileURLToPath(import.meta.url);
-var __dirname = path2.dirname(__filename);
+var __dirname = path3.dirname(__filename);
 var app = express9();
 var isConnected = false;
 var connectionPromise = null;
@@ -1445,10 +1472,10 @@ app.use(asyncHandler(async (req, res, next) => {
   await ensureConnection();
   next();
 }));
-var uploadsPath = process.env.UPLOADS_PATH || path2.join(process.cwd(), "uploads");
-if (!process.env.VERCEL && !fs2.existsSync(uploadsPath)) {
+var uploadsPath = process.env.UPLOADS_PATH || path3.join(process.cwd(), "uploads");
+if (!process.env.VERCEL && !fs.existsSync(uploadsPath)) {
   try {
-    fs2.mkdirSync(uploadsPath, { recursive: true });
+    fs.mkdirSync(uploadsPath, { recursive: true });
   } catch (err) {
     console.error("Error creating uploads directory:", err);
   }
@@ -1457,20 +1484,20 @@ app.use("/uploads", express9.static(uploadsPath, {
   setHeaders: (res, filePath) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-    if (path2.extname(filePath).toLowerCase() === ".pdf") {
+    if (path3.extname(filePath).toLowerCase() === ".pdf") {
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", "inline");
     }
   }
 }));
 app.get("/api/debug/uploads", (req, res) => {
-  fs2.readdir(uploadsPath, (err, files) => {
+  fs.readdir(uploadsPath, (err, files) => {
     if (err) return res.status(500).json({ error: err.message, path: uploadsPath, env: process.env.UPLOADS_PATH });
     res.json({ path: uploadsPath, env: process.env.UPLOADS_PATH, files });
   });
 });
 app.use("/uploads", (req, res) => {
-  console.error(`404: File not found at ${path2.join(uploadsPath, req.path)}`);
+  console.error(`404: File not found at ${path3.join(uploadsPath, req.path)}`);
   res.status(404).send("File not found on server");
 });
 app.use("/api/auth", authRoutes_default);
@@ -1495,12 +1522,12 @@ var setupFrontend = async () => {
       console.error("Vite Server Error:", err);
     }
   } else {
-    const distPath = path2.join(process.cwd(), "dist");
-    if (fs2.existsSync(distPath)) {
+    const distPath = path3.join(process.cwd(), "dist");
+    if (fs.existsSync(distPath)) {
       app.use(express9.static(distPath));
       app.get("*", (req, res, next) => {
         if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) return next();
-        res.sendFile(path2.join(distPath, "index.html"));
+        res.sendFile(path3.join(distPath, "index.html"));
       });
     } else {
       app.get("*", (req, res, next) => {
