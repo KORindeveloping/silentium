@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { pdfjs, Document, Page } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
+import { API_BASE_URL } from '../config';
 
 // Configure PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -30,20 +31,20 @@ export const Reader: React.FC = () => {
     const token = localStorage.getItem('token');
     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-    fetch('/api/auth/me', { headers })
+    fetch(`${API_BASE_URL}/api/auth/me`, { headers })
       .then(res => res.json())
       .then(data => {
         if (data._id) setUser(data);
       })
       .catch(() => {});
 
-    fetch(`/api/books/${id}`)
+    fetch(`${API_BASE_URL}/api/books/${id}`)
       .then(res => res.json())
       .then(data => setDoc(data));
 
     const interval = setInterval(() => {
       if (token) {
-        fetch('/api/analytics/track', {
+        fetch(`${API_BASE_URL}/api/analytics/track`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -119,27 +120,20 @@ export const Reader: React.FC = () => {
             <div className="flex flex-col items-center py-8 min-h-[600px] relative">
               <Document
                 file={(() => {
-                  if (!doc.fileUrl) return null; // Return null if no fileUrl is present
+                  if (!doc.fileUrl) return null;
                   
-                  // If doc.fileUrl is already an absolute URL, use it directly.
                   if (doc.fileUrl.startsWith('http:') || doc.fileUrl.startsWith('https:')) {
                     return doc.fileUrl;
                   } else {
-                    // It's a relative path. Construct the full URL.
-                    const origin = window.location.origin;
-                    // Normalize Windows paths to use forward slashes.
+                    const baseUrl = API_BASE_URL || window.location.origin;
                     const normalizedPath = doc.fileUrl.replace(/\\/g, '/');
                     
-                    // Ensure a single slash between origin and path.
-                    // If origin ends with '/', remove the leading '/' from normalizedPath.
-                    // If origin does not end with '/' and normalizedPath starts with '/', use it as is.
-                    // Otherwise, add a '/' if needed.
-                    if (origin.endsWith('/') && normalizedPath.startsWith('/')) {
-                      return `${origin}${normalizedPath.substring(1)}`;
-                    } else if (!origin.endsWith('/') && !normalizedPath.startsWith('/')) {
-                      return `${origin}/${normalizedPath}`;
+                    if (baseUrl.endsWith('/') && normalizedPath.startsWith('/')) {
+                      return `${baseUrl}${normalizedPath.substring(1)}`;
+                    } else if (!baseUrl.endsWith('/') && !normalizedPath.startsWith('/')) {
+                      return `${baseUrl}/${normalizedPath}`;
                     } else {
-                      return `${origin}${normalizedPath}`;
+                      return `${baseUrl}${normalizedPath}`;
                     }
                   }
                 })()}

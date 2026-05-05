@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { AuthModal } from '../components/AuthModal';
 import { pdfjs } from 'react-pdf';
+import { API_BASE_URL } from '../config';
 
 // Configure PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -35,7 +36,7 @@ export const UploadPage: React.FC = () => {
       const token = localStorage.getItem('token');
       if (token) {
         try {
-          const res = await fetch('/api/auth/me', {
+          const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           if (res.ok) {
@@ -172,7 +173,7 @@ export const UploadPage: React.FC = () => {
 
     // Use XHR for progress tracking
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/books', true);
+    xhr.open('POST', `${API_BASE_URL}/api/books`, true);
     
     const token = localStorage.getItem('token');
     if (token) {

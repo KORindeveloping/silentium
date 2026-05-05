@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
 import { Book as BookType } from '../types';
 import { Clock, Eye, Heart, Bookmark, User as UserIcon, BookOpen, Share2, FileText } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 interface BookCardProps {
   book: BookType;
@@ -26,12 +27,12 @@ export const BookCard: React.FC<BookCardProps> = ({ book, isSkeleton, onQuickVie
   }
 
   const coverImageUrl = book.coverImage 
-    ? (book.coverImage.startsWith('http') ? book.coverImage : `/${book.coverImage.replace(/\\/g, '/')}`)
+    ? (book.coverImage.startsWith('http') ? book.coverImage : `${API_BASE_URL}/${book.coverImage.replace(/\\/g, '/')}`)
     : null;
 
   const isPDF = book.fileUrl?.toLowerCase().endsWith('.pdf');
   const normalizedFileUrl = book.fileUrl 
-    ? (book.fileUrl.startsWith('http') ? book.fileUrl : `/${book.fileUrl.replace(/\\/g, '/')}`)
+    ? (book.fileUrl.startsWith('http') ? book.fileUrl : `${API_BASE_URL}/${book.fileUrl.replace(/\\/g, '/')}`)
     : null;
 
   return (

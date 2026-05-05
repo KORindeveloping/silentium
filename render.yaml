@@ -1,6 +1,7 @@
 services:
+  # Backend API Service
   - type: web
-    name: silentium
+    name: silentium-api
     runtime: node
     buildCommand: npm install && npm run build
     startCommand: npm start
@@ -24,3 +25,16 @@ services:
       name: uploads
       mountPath: /opt/render/project/src/uploads
       sizeGB: 1
+
+  # Frontend Static Site
+  - type: static
+    name: silentium-frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://silentium-api.onrender.com # This should be updated by the user if the name changes
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

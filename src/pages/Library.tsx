@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Book, Edit2, Trash2, Eye, Heart, MoreVertical, Search, Plus, Archive, FileText } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Book as BookType } from '../types';
+import { API_BASE_URL } from '../config';
 
 export const Library: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'published' | 'draft' | 'archived'>('published');
@@ -25,7 +26,7 @@ export const Library: React.FC = () => {
         return;
       }
 
-      const userRes = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } });
+      const userRes = await fetch(`${API_BASE_URL}/api/auth/me`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (userRes.status === 401) {
         localStorage.removeItem('token');
         setLoading(false);
@@ -34,7 +35,7 @@ export const Library: React.FC = () => {
       if (!userRes.ok) throw new Error('Auth failed');
       const userData = await userRes.json();
       
-      const res = await fetch(`/api/books?authorId=${userData._id}&status=${activeTab}`, {
+      const res = await fetch(`${API_BASE_URL}/api/books?authorId=${userData._id}&status=${activeTab}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Fetch failed');
@@ -51,7 +52,7 @@ export const Library: React.FC = () => {
     if (!deleteId) return;
     try {
       const token = localStorage.getItem('token');
-      await fetch(`/api/books/${deleteId}`, {
+      await fetch(`${API_BASE_URL}/api/books/${deleteId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });

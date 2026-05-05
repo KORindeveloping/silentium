@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Mail, Lock, User as UserIcon, ShieldCheck, AlertCircle, Loader2 } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -44,7 +45,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
     }
 
     setIsLoading(true);
-    const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
+    const endpoint = isLogin ? `${API_BASE_URL}/api/auth/login` : `${API_BASE_URL}/api/auth/register`;
     const body = isLogin ? { email, password, rememberMe } : { email, password, role };
 
     try {

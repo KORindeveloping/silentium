@@ -2,18 +2,19 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { Shield, Check, X, AlertCircle, TrendingUp } from 'lucide-react';
 import { Document } from '../types';
+import { API_BASE_URL } from '../config';
 
 export const AdminPanel: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
   const [docs, setDocs] = useState<Document[]>([]);
 
   useEffect(() => {
-    fetch('/api/admin/stats').then(res => res.json()).then(setStats);
-    fetch('/api/admin/documents').then(res => res.json()).then(setDocs);
+    fetch(`${API_BASE_URL}/api/admin/stats`).then(res => res.json()).then(setStats);
+    fetch(`${API_BASE_URL}/api/admin/documents`).then(res => res.json()).then(setDocs);
   }, []);
 
   const updateStatus = async (id: string, status: string) => {
-    await fetch(`/api/admin/documents/${id}/status`, {
+    await fetch(`${API_BASE_URL}/api/admin/documents/${id}/status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status })

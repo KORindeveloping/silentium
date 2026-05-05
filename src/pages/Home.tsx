@@ -4,6 +4,7 @@ import { Search, Flame, Clock, Heart, X, BookOpen, User as UserIcon, ArrowRight 
 import { Link } from 'react-router-dom';
 import { BookCard } from '../components/BookCard';
 import { Book, Category } from '../types';
+import { API_BASE_URL } from '../config';
 
 export const Home: React.FC = () => {
   const [books, setBooks] = useState<Book[]>([]);
@@ -37,7 +38,7 @@ export const Home: React.FC = () => {
       if (category !== 'All') queryParams.append('category', category);
       queryParams.append('sort', sortBy);
       
-      const res = await fetch(`/api/books?${queryParams.toString()}`);
+      const res = await fetch(`${API_BASE_URL}/api/books?${queryParams.toString()}`);
       const data = await res.json();
       setBooks(data.books || []);
     } catch (error) {
@@ -51,7 +52,7 @@ export const Home: React.FC = () => {
     setLoadingCategory(true);
     setSelectedCategory(cat);
     try {
-      const res = await fetch(`/api/books?category=${cat}&limit=6`);
+      const res = await fetch(`${API_BASE_URL}/api/books?category=${cat}&limit=6`);
       const data = await res.json();
       setCategoryBooks(data.books || []);
     } catch (error) {

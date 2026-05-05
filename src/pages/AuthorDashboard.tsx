@@ -4,6 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { DollarSign, Eye, Clock, Book, ArrowUpRight, History, CheckCircle2, AlertCircle, RefreshCw, Users, Wallet } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AuthorStats } from '../types';
+import { API_BASE_URL } from '../config';
 
 export const AuthorDashboard: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
@@ -30,7 +31,7 @@ export const AuthorDashboard: React.FC = () => {
       };
 
       // Get user ID first
-      const meRes = await fetch('/api/auth/me', { headers });
+      const meRes = await fetch(`${API_BASE_URL}/api/auth/me`, { headers });
       if (meRes.status === 401) {
         localStorage.removeItem('token');
         setError('Session expired. Please login again.');
@@ -41,7 +42,7 @@ export const AuthorDashboard: React.FC = () => {
       const authorId = meData._id;
 
       // Fetch stats
-      const statsRes = await fetch('/api/analytics/stats', { headers });
+      const statsRes = await fetch(`${API_BASE_URL}/api/analytics/stats`, { headers });
       const statsData = await statsRes.json();
       
       if (!statsRes.ok) throw new Error(statsData.message || 'Failed to fetch stats');
@@ -49,7 +50,7 @@ export const AuthorDashboard: React.FC = () => {
       setStats(statsData);
 
       // Fetch books by this author
-      const docsRes = await fetch(`/api/books?authorId=${authorId}`, { headers }); 
+      const docsRes = await fetch(`${API_BASE_URL}/api/books?authorId=${authorId}`, { headers }); 
       const docsData = await docsRes.json();
       
       if (!docsRes.ok) throw new Error(docsData.message || 'Failed to fetch documents');
@@ -73,7 +74,7 @@ export const AuthorDashboard: React.FC = () => {
     setError(null);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('/api/analytics/payout', {
+      const res = await fetch(`${API_BASE_URL}/api/analytics/payout`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

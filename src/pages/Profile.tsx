@@ -17,6 +17,7 @@ import {
   LogOut,
   ChevronRight
 } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 interface UserProfile {
   _id: string;
@@ -67,7 +68,7 @@ export const Profile = () => {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      const res = await fetch('/api/auth/me', {
+      const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.status === 401) {
@@ -138,7 +139,7 @@ export const Profile = () => {
         formDataToSend.append('avatar', avatarFile);
       }
 
-      const res = await fetch('/api/auth/profile', {
+      const res = await fetch(`${API_BASE_URL}/api/auth/profile`, {
         method: 'PUT',
         headers: { 
           Authorization: `Bearer ${token}` 
@@ -168,7 +169,7 @@ export const Profile = () => {
   const handleDeleteAccount = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('/api/auth/profile', {
+      const res = await fetch(`${API_BASE_URL}/api/auth/profile`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -219,7 +220,7 @@ export const Profile = () => {
             {avatarPreview ? (
               <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
             ) : user?.avatar ? (
-              <img src={user.avatar.startsWith('http') ? user.avatar : `/${user.avatar}`} alt="Avatar" className="w-full h-full object-cover" />
+              <img src={user.avatar.startsWith('http') ? user.avatar : `${API_BASE_URL}/${user.avatar.replace(/\\/g, '/')}`} alt="Avatar" className="w-full h-full object-cover" />
             ) : (
               <UserIcon size={64} className="text-muted-gray/20" />
             )}
