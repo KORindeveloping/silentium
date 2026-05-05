@@ -20,13 +20,13 @@ export const createBook = async (req: Request, res: Response) => {
 
     // Upload File (PDF/Doc)
     if (files?.['file']?.[0]) {
-      const result = await uploadToCloudinary(files['file'][0].buffer, 'books/files', 'raw');
+      const result = await uploadToCloudinary(files['file'][0].buffer, 'books/files');
       fileUrl = result.secure_url;
     }
 
     // Upload Cover Image
     if (files?.['coverImage']?.[0]) {
-      const result = await uploadToCloudinary(files['coverImage'][0].buffer, 'books/covers', 'image');
+      const result = await uploadToCloudinary(files['coverImage'][0].buffer, 'books/covers');
       coverImageUrl = result.secure_url;
     }
 

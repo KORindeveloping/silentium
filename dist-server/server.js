@@ -1,5 +1,5 @@
 // server.ts
-import dotenv2 from "dotenv";
+import dotenv from "dotenv";
 import express9 from "express";
 import { createServer as createViteServer } from "vite";
 import path3 from "path";
@@ -555,30 +555,16 @@ BookSchema.index({ title: "text", description: "text", tags: "text" });
 var Book = mongoose5.models.Book || mongoose5.model("Book", BookSchema);
 var Book_default = Book;
 
-// server/config/cloudinary.ts
-import { v2 as cloudinary } from "cloudinary";
-import dotenv from "dotenv";
-dotenv.config();
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
-var cloudinary_default = cloudinary;
-
 // server/utils/cloudinaryHelper.ts
+import { v2 as cloudinary } from "cloudinary";
 import streamifier from "streamifier";
-var uploadToCloudinary = (buffer, folder, resourceType = "auto") => {
+var uploadToCloudinary = (buffer, folder) => {
   return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary_default.uploader.upload_stream(
-      {
-        folder,
-        resource_type: resourceType
-      },
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { folder, resource_type: "raw" },
       (error, result) => {
-        if (error) return reject(error);
-        if (!result) return reject(new Error("Cloudinary upload failed"));
-        resolve(result);
+        if (result) resolve(result);
+        else reject(error);
       }
     );
     streamifier.createReadStream(buffer).pipe(uploadStream);
@@ -1413,7 +1399,7 @@ var errorHandler = (err, req, res, next) => {
 };
 
 // server.ts
-dotenv2.config();
+dotenv.config();
 var __filename = fileURLToPath(import.meta.url);
 var __dirname = path3.dirname(__filename);
 var app = express9();
@@ -1472,34 +1458,6 @@ app.use(asyncHandler(async (req, res, next) => {
   await ensureConnection();
   next();
 }));
-var uploadsPath = process.env.UPLOADS_PATH || path3.join(process.cwd(), "uploads");
-if (!process.env.VERCEL && !fs.existsSync(uploadsPath)) {
-  try {
-    fs.mkdirSync(uploadsPath, { recursive: true });
-  } catch (err) {
-    console.error("Error creating uploads directory:", err);
-  }
-}
-app.use("/uploads", express9.static(uploadsPath, {
-  setHeaders: (res, filePath) => {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-    if (path3.extname(filePath).toLowerCase() === ".pdf") {
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", "inline");
-    }
-  }
-}));
-app.get("/api/debug/uploads", (req, res) => {
-  fs.readdir(uploadsPath, (err, files) => {
-    if (err) return res.status(500).json({ error: err.message, path: uploadsPath, env: process.env.UPLOADS_PATH });
-    res.json({ path: uploadsPath, env: process.env.UPLOADS_PATH, files });
-  });
-});
-app.use("/uploads", (req, res) => {
-  console.error(`404: File not found at ${path3.join(uploadsPath, req.path)}`);
-  res.status(404).send("File not found on server");
-});
 app.use("/api/auth", authRoutes_default);
 app.use("/api/books", bookRoutes_default);
 app.use("/api/analytics", analyticsRoutes_default);
