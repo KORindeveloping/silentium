@@ -1,5 +1,8 @@
 services:
-  # Backend API Service
+  # ---------------------------------------------------------------------------
+  # 1. BACKEND (Web Service)
+  # This service runs the Express server and stores the PDF files.
+  # ---------------------------------------------------------------------------
   - type: web
     name: silentium-api
     runtime: node
@@ -10,15 +13,12 @@ services:
         value: production
       - key: MONGO_URI
         sync: false
-        placeholder: "Enter your MongoDB Atlas URI here"
       - key: JWT_SECRET
         generateValue: true
       - key: STRIPE_SECRET_KEY
         sync: false
-        placeholder: "Enter your Stripe Secret Key"
       - key: GEMINI_API_KEY
         sync: false
-        placeholder: "Enter your Gemini API Key"
       - key: UPLOADS_PATH
         value: /opt/render/project/src/uploads
     disk:
@@ -26,14 +26,19 @@ services:
       mountPath: /opt/render/project/src/uploads
       sizeGB: 1
 
-  # Frontend Static Site
+  # ---------------------------------------------------------------------------
+  # 2. FRONTEND (Static Site)
+  # This service serves the compiled React/Vite app.
+  # ---------------------------------------------------------------------------
   - type: static
     name: silentium-frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        value: https://silentium-api.onrender.com # This should be updated by the user if the name changes
+        # REPLACE THIS with your actual backend URL after the first deployment
+        # Example: https://silentium-api.onrender.com
+        value: https://silentium-api.onrender.com
     routes:
       - type: rewrite
         source: /*
