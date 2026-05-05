@@ -125,16 +125,9 @@ export const Reader: React.FC = () => {
                   if (doc.fileUrl.startsWith('http:') || doc.fileUrl.startsWith('https:')) {
                     return doc.fileUrl;
                   } else {
-                    const baseUrl = API_BASE_URL || window.location.origin;
-                    const normalizedPath = doc.fileUrl.replace(/\\/g, '/');
-                    
-                    if (baseUrl.endsWith('/') && normalizedPath.startsWith('/')) {
-                      return `${baseUrl}${normalizedPath.substring(1)}`;
-                    } else if (!baseUrl.endsWith('/') && !normalizedPath.startsWith('/')) {
-                      return `${baseUrl}/${normalizedPath}`;
-                    } else {
-                      return `${baseUrl}${normalizedPath}`;
-                    }
+                    const baseUrl = (API_BASE_URL || window.location.origin).replace(/\/$/, '');
+                    const normalizedPath = doc.fileUrl.startsWith('/') ? doc.fileUrl : `/${doc.fileUrl}`;
+                    return `${baseUrl}${normalizedPath}`;
                   }
                 })()}
                 onLoadSuccess={onDocumentLoadSuccess}
