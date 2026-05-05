@@ -63,24 +63,13 @@ export const getBooks = async (req: Request, res: Response) => {
     .limit(pageSize)
     .skip(pageSize * (page - 1));
 
-  const getFullUrl = (req: Request, filePath: string | undefined) => {
+  const getFullUrl = (filePath: string | undefined) => {
     if (!filePath) return undefined;
     if (filePath.startsWith('http')) return filePath;
 
-    let normalizedPath = filePath.replace(/\\/g, '/'); // Normalize Windows paths
-
-    // If filePath is an absolute path from the server's filesystem, we only want the filename
-    if (path.isAbsolute(filePath)) {
-      normalizedPath = path.basename(filePath);
-    }
-    
-    // Ensure the path starts with 'uploads/' for express.static
-    if (!normalizedPath.startsWith('uploads/')) {
-      normalizedPath = `uploads/${normalizedPath}`;
-    }
-
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
-    return `${baseUrl}/${normalizedPath.replace(/^\//, '')}`; // Remove leading slash if any after prepending 'uploads/'
+    // Ensure the path is just the filename or starts with 'uploads/'
+    const filename = path.basename(filePath);
+    return `/uploads/${filename}`;
   };
 
   const formattedBooks = books.map(book => {
@@ -94,11 +83,11 @@ export const getBooks = async (req: Request, res: Response) => {
       author: {
         _id: b.authorId?._id,
         name: b.authorId?.name || b.authorId?.email?.split('@')[0] || 'Unknown',
-        avatar: getFullUrl(req, b.authorId?.avatar),
+        avatar: getFullUrl(b.authorId?.avatar),
         credits: b.authorId?.credits
       },
-      coverImage: getFullUrl(req, b.coverImage),
-      fileUrl: getFullUrl(req, b.fileUrl),
+      coverImage: getFullUrl(b.coverImage),
+      fileUrl: getFullUrl(b.fileUrl),
       content: b.content,
       pageCount: b.pageCount,
       views: b.views,
@@ -124,17 +113,12 @@ export const getBookById = async (req: Request, res: Response) => {
     book.views += 1;
     await book.save();
 
-    const getFullUrl = (req: Request, filePath: string | undefined) => {
+    const getFullUrl = (filePath: string | undefined) => {
       if (!filePath) return undefined;
       if (filePath.startsWith('http')) return filePath;
       
-      let normalizedPath = filePath;
-      if (path.isAbsolute(filePath)) {
-        normalizedPath = `uploads/${path.basename(filePath)}`;
-      }
-      
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
-      return `${baseUrl}/${normalizedPath.replace(/\\/g, '/').replace(/^\//, '')}`;
+      const filename = path.basename(filePath);
+      return `/uploads/${filename}`;
     };
 
     const b = book as any;
@@ -147,11 +131,11 @@ export const getBookById = async (req: Request, res: Response) => {
       author: {
         _id: b.authorId?._id,
         name: b.authorId?.name || b.authorId?.email?.split('@')[0] || 'Unknown',
-        avatar: getFullUrl(req, b.authorId?.avatar),
+        avatar: getFullUrl(b.authorId?.avatar),
         credits: b.authorId?.credits
       },
-      coverImage: getFullUrl(req, b.coverImage),
-      fileUrl: getFullUrl(req, b.fileUrl),
+      coverImage: getFullUrl(b.coverImage),
+      fileUrl: getFullUrl(b.fileUrl),
       content: b.content,
       pageCount: b.pageCount,
       views: b.views,
