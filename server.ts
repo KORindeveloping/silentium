@@ -87,7 +87,12 @@ app.use(asyncHandler(async (req: any, res: any, next: any) => {
   next();
 }));
 
-// 3. Static Files (Cloudinary used instead)
+// 3. Static Files (Cloudinary used for books, local disk for avatars)
+const uploadsDir = process.env.UPLOADS_PATH || path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+app.use('/uploads', express.static(uploadsDir));
 
 // 4. API Routes
 app.use('/api/auth', authRoutes);

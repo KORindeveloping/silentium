@@ -1,8 +1,23 @@
 import multer from 'multer';
 import path from 'path';
+import fs from 'fs';
 
-// Use memory storage for Cloudinary uploads
-const storage = multer.memoryStorage();
+// Ensure uploads directory exists
+const uploadsDir = process.env.UPLOADS_PATH || path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Use disk storage for persistence
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, `${file.fieldname}-${uniqueSuffix}${path.extname(file.originalname)}`);
+  },
+});
 
 // Check file type
 function checkFileType(file: Express.Multer.File, cb: multer.FileFilterCallback) {
