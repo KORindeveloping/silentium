@@ -41,5 +41,8 @@ services:
         value: https://silentium-api.onrender.com
     routes:
       - type: rewrite
+        source: /uploads/*
+        destination: https://silentium-api.onrender.com/uploads/*
+      - type: rewrite
         source: /*
         destination: /index.html

@@ -5,7 +5,7 @@ import { createServer as createViteServer } from "vite";
 import path3 from "path";
 import cors from "cors";
 import helmet from "helmet";
-import fs from "fs";
+import fs2 from "fs";
 import { fileURLToPath } from "url";
 
 // server/config/db.ts
@@ -438,7 +438,20 @@ var author = (req, res, next) => {
 // server/middleware/uploadMiddleware.ts
 import multer from "multer";
 import path2 from "path";
-var storage = multer.memoryStorage();
+import fs from "fs";
+var uploadsDir = process.env.UPLOADS_PATH || path2.join(process.cwd(), "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+var storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, `${file.fieldname}-${uniqueSuffix}${path2.extname(file.originalname)}`);
+  }
+});
 function checkFileType(file, cb) {
   const filetypes = /pdf|doc|docx|epub|jpg|jpeg|png|webp/;
   const extname = filetypes.test(path2.extname(file.originalname).toLowerCase());
@@ -557,17 +570,16 @@ var Book_default = Book;
 
 // server/utils/cloudinaryHelper.ts
 import { v2 as cloudinary } from "cloudinary";
-import streamifier from "streamifier";
-var uploadToCloudinary = (buffer, folder) => {
+var uploadToCloudinary = (filePath, folder) => {
   return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      { folder, resource_type: "raw" },
+    cloudinary.uploader.upload(
+      filePath,
+      { folder, resource_type: "auto" },
       (error, result) => {
         if (result) resolve(result);
         else reject(error);
       }
     );
-    streamifier.createReadStream(buffer).pipe(uploadStream);
   });
 };
 
@@ -582,11 +594,11 @@ var createBook = async (req, res) => {
     let fileUrl;
     let coverImageUrl;
     if (files?.["file"]?.[0]) {
-      const result = await uploadToCloudinary(files["file"][0].buffer, "books/files", "raw");
+      const result = await uploadToCloudinary(files["file"][0].path, "books/files");
       fileUrl = result.secure_url;
     }
     if (files?.["coverImage"]?.[0]) {
-      const result = await uploadToCloudinary(files["coverImage"][0].buffer, "books/covers", "image");
+      const result = await uploadToCloudinary(files["coverImage"][0].path, "books/covers");
       coverImageUrl = result.secure_url;
     }
     const book = new Book_default({
@@ -1458,6 +1470,11 @@ app.use(asyncHandler(async (req, res, next) => {
   await ensureConnection();
   next();
 }));
+var uploadsDir2 = process.env.UPLOADS_PATH || path3.join(process.cwd(), "uploads");
+if (!fs2.existsSync(uploadsDir2)) {
+  fs2.mkdirSync(uploadsDir2, { recursive: true });
+}
+app.use("/uploads", express9.static(uploadsDir2));
 app.use("/api/auth", authRoutes_default);
 app.use("/api/books", bookRoutes_default);
 app.use("/api/analytics", analyticsRoutes_default);
@@ -1481,7 +1498,7 @@ var setupFrontend = async () => {
     }
   } else {
     const distPath = path3.join(process.cwd(), "dist");
-    if (fs.existsSync(distPath)) {
+    if (fs2.existsSync(distPath)) {
       app.use(express9.static(distPath));
       app.get("*", (req, res, next) => {
         if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) return next();
