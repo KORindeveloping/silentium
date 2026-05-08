@@ -96,23 +96,54 @@ app.get('/', (req, res) => {
   });
 });
 
+// Test endpoint to create a sample file
+app.get('/test-upload', (req, res) => {
+  try {
+    const testFile = path.join(uploadsDir, 'test-sample.pdf');
+    const testContent = 'Sample PDF content for testing\nCreated: ' + new Date().toISOString();
+    fs.writeFileSync(testFile, testContent);
+    
+    res.json({
+      message: 'Test file created',
+      file: 'test-sample.pdf',
+      url: `${req.protocol}://${req.get('host')}/uploads/test-sample.pdf`,
+      uploadsDir: uploadsDir
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 3. Static Files (Cloudinary used for books, local disk for avatars)
 const uploadsDir = process.env.UPLOADS_PATH || path.join(process.cwd(), 'uploads');
 console.log('Uploads directory:', uploadsDir);
 console.log('Current working directory:', process.cwd());
 console.log('Environment UPLOADS_PATH:', process.env.UPLOADS_PATH);
 
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-  console.log('Created uploads directory:', uploadsDir);
-} else {
-  console.log('Uploads directory exists');
+// Ensure uploads directory exists with proper permissions
+try {
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    console.log('Created uploads directory:', uploadsDir);
+  } else {
+    console.log('Uploads directory exists');
+  }
+  
+  // Test directory access
+  const testFile = path.join(uploadsDir, 'test-access.txt');
+  fs.writeFileSync(testFile, 'test');
+  fs.unlinkSync(testFile);
+  console.log('Uploads directory is writable');
+  
+  // List files if any exist
   try {
     const files = fs.readdirSync(uploadsDir);
-    console.log('Files in uploads:', files);
+    console.log('Files in uploads:', files.length > 0 ? files : '(empty)');
   } catch (err) {
     console.log('Cannot read uploads directory:', err.message);
   }
+} catch (error) {
+  console.error('Error setting up uploads directory:', error);
 }
 
 // Serve uploads with proper headers and caching
