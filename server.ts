@@ -1,17 +1,6 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-// Ensure required environment variables
-if (!process.env.MONGO_URI) {
-  console.error('ERROR: MONGO_URI environment variable is required');
-  process.exit(1);
-}
-
-if (!process.env.JWT_SECRET) {
-  console.error('ERROR: JWT_SECRET environment variable is required');
-  process.exit(1);
-}
-
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
@@ -98,22 +87,43 @@ app.use(asyncHandler(async (req: any, res: any, next: any) => {
   next();
 }));
 
+// Root route for health check
+app.get('/', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    message: 'Silentium API is running',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // 3. Static Files (Cloudinary used for books, local disk for avatars)
 const uploadsDir = process.env.UPLOADS_PATH || path.join(process.cwd(), 'uploads');
 console.log('Uploads directory:', uploadsDir);
+console.log('Current working directory:', process.cwd());
+console.log('Environment UPLOADS_PATH:', process.env.UPLOADS_PATH);
+
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   console.log('Created uploads directory:', uploadsDir);
+} else {
+  console.log('Uploads directory exists');
+  try {
+    const files = fs.readdirSync(uploadsDir);
+    console.log('Files in uploads:', files);
+  } catch (err) {
+    console.log('Cannot read uploads directory:', err.message);
+  }
 }
 
 // Serve uploads with proper headers and caching
 app.use('/uploads', (req, res, next) => {
-  console.log('Upload request:', req.path);
+  console.log('Upload request:', req.path, 'Full URL:', req.originalUrl);
   next();
 }, express.static(uploadsDir, {
   maxAge: '1d',
   etag: true,
-  lastModified: true
+  lastModified: true,
+  fallthrough: false
 }));
 
 // 4. API Routes

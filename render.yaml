@@ -9,7 +9,7 @@ services:
     buildCommand: npm install && npm run build
     startCommand: node dist-server/server.js
     healthCheck:
-      path: /api/auth/me
+      path: /
     envVars:
       - key: NODE_ENV
         value: production
