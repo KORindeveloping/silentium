@@ -89,10 +89,21 @@ app.use(asyncHandler(async (req: any, res: any, next: any) => {
 
 // 3. Static Files (Cloudinary used for books, local disk for avatars)
 const uploadsDir = process.env.UPLOADS_PATH || path.join(process.cwd(), 'uploads');
+console.log('Uploads directory:', uploadsDir);
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
+  console.log('Created uploads directory:', uploadsDir);
 }
-app.use('/uploads', express.static(uploadsDir));
+
+// Serve uploads with proper headers and caching
+app.use('/uploads', (req, res, next) => {
+  console.log('Upload request:', req.path);
+  next();
+}, express.static(uploadsDir, {
+  maxAge: '1d',
+  etag: true,
+  lastModified: true
+}));
 
 // 4. API Routes
 app.use('/api/auth', authRoutes);
