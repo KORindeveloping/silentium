@@ -1,6 +1,17 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+// Ensure required environment variables
+if (!process.env.MONGO_URI) {
+  console.error('ERROR: MONGO_URI environment variable is required');
+  process.exit(1);
+}
+
+if (!process.env.JWT_SECRET) {
+  console.error('ERROR: JWT_SECRET environment variable is required');
+  process.exit(1);
+}
+
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';

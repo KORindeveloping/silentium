@@ -7,7 +7,9 @@ services:
     name: silentium-api
     runtime: node
     buildCommand: npm install && npm run build
-    startCommand: npm start
+    startCommand: node dist-server/server.js
+    healthCheck:
+      path: /api/auth/me
     envVars:
       - key: NODE_ENV
         value: production
