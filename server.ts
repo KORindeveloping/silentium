@@ -64,6 +64,7 @@ if (isDev) {
         "style-src": ["'self'", "'unsafe-inline'"],
         "img-src": ["'self'", "data:", "blob:", "https://*"],
         "frame-src": ["'self'", "blob:", "*"], // Allow framing from anywhere if needed
+        "frame-ancestors": ["'self'", "https://*.vercel.app", "https://silentium-m9z8.onrender.com", "http://localhost:3000"],
         "object-src": ["'self'", "blob:"],
         "connect-src": ["'self'", "blob:", "https://unpkg.com", "*"],
       },
@@ -172,6 +173,9 @@ try {
 // Serve uploads with proper headers and caching
 app.use('/uploads', (req, res, next) => {
   console.log('Upload request:', req.path, 'Full URL:', req.originalUrl);
+  // Upload files may be embedded by a frontend hosted on a different origin.
+  res.setHeader('Content-Security-Policy', "default-src 'self'; frame-ancestors 'self' https://*.vercel.app https://silentium-m9z8.onrender.com");
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   next();
 }, express.static(uploadsDir, {
   maxAge: '1d',
