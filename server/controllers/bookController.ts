@@ -56,7 +56,7 @@ export const createBook = async (req: Request, res: Response) => {
       
       if (fileSizeMB > 10) {
         // Use local storage for files >10MB (Cloudinary limit)
-        const baseUrl = process.env.APP_URL || 'http://localhost:3000';
+        const baseUrl = process.env.APP_URL || 'https://silentium-m9z8.onrender.com';
         fileUrl = `${baseUrl}/uploads/${file.filename}`;
         console.log(`Large file (${fileSizeMB.toFixed(1)}MB) stored locally: ${file.filename}`);
       } else {

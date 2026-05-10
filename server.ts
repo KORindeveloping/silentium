@@ -173,15 +173,25 @@ try {
 // Serve uploads with proper headers and caching
 app.use('/uploads', (req, res, next) => {
   console.log('Upload request:', req.path, 'Full URL:', req.originalUrl);
-  // Upload files may be embedded by a frontend hosted on a different origin.
-  res.setHeader('Content-Security-Policy', "default-src 'self'; frame-ancestors 'self' https://*.vercel.app https://silentium-m9z8.onrender.com");
+  // Add proper CORS headers for cross-origin access
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
   next();
 }, express.static(uploadsDir, {
   maxAge: '1d',
   etag: true,
   lastModified: true,
-  fallthrough: false
+  setHeaders: (res, path, stat) => {
+    // Set additional headers for PDF files
+    if (path.endsWith('.pdf')) {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    }
+  }
 }));
 
 // 4. API Routes
