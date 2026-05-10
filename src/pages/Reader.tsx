@@ -120,15 +120,10 @@ export const Reader: React.FC = () => {
             <div className="flex flex-col items-center py-8 min-h-[600px] relative">
               <Document
                 file={(() => {
-                  if (!doc.fileUrl) return null;
-                  
-                  if (doc.fileUrl.startsWith('http:') || doc.fileUrl.startsWith('https:')) {
-                    return doc.fileUrl;
-                  } else {
-                    const baseUrl = (API_BASE_URL || window.location.origin).replace(/\/$/, '');
-                    const cleanPath = doc.fileUrl.startsWith('/') ? doc.fileUrl.substring(1) : doc.fileUrl;
-                    return `${baseUrl}/${cleanPath}`;
-                  }
+                  if (!doc.fileUrl || !id) return null;
+                  // Always load via API proxy so CSP frame-ancestors on CDNs does not block PDF.js.
+                  const baseUrl = (API_BASE_URL || window.location.origin).replace(/\/$/, '');
+                  return `${baseUrl}/api/books/${id}/file`;
                 })()}
                 onLoadSuccess={onDocumentLoadSuccess}
                 onLoadError={onDocumentLoadError}

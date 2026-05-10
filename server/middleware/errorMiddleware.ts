@@ -5,7 +5,10 @@ const isDev = process.env.NODE_ENV !== 'production';
 export const errorHandler = (err: any, req: Request, res: Response, next: NextFunction) => {
   // Ensure we don't crash the error handler itself
   try {
-    const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+    const statusCode =
+      err?.statusCode ||
+      err?.status ||
+      (res.statusCode === 200 ? 500 : res.statusCode);
     res.status(statusCode).header('Content-Type', 'application/json');
 
     // Log errors with more context for production debugging
@@ -77,6 +80,15 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
         success: false,
         message: 'Database connection failed',
         code: 'DATABASE_ERROR'
+      });
+    }
+
+    // Static file not found (e.g., missing uploads in ephemeral storage)
+    if (err.code === 'ENOENT' || err.code === 'ENAMETOOLONG') {
+      return res.status(404).json({
+        success: false,
+        message: 'File not found',
+        code: 'FILE_NOT_FOUND'
       });
     }
 

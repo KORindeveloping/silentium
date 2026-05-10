@@ -10,3 +10,10 @@ cloudinary.config({
 });
 
 export default cloudinary;
+
+export const isCloudinaryConfigured = () =>
+  Boolean(
+    process.env.CLOUDINARY_CLOUD_NAME?.trim() &&
+      process.env.CLOUDINARY_API_KEY?.trim() &&
+      process.env.CLOUDINARY_API_SECRET?.trim()
+  );

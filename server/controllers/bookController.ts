@@ -1,7 +1,29 @@
 import { Request, Response } from 'express';
+import path from 'path';
+import fs from 'fs';
+import { Readable } from 'node:stream';
 import Book from '../models/Book';
 import User from '../models/User';
 import { uploadToCloudinary } from '../utils/cloudinaryHelper';
+import { isCloudinaryConfigured } from '../config/cloudinary';
+
+const uploadsDirRoot = () => process.env.UPLOADS_PATH || path.join(process.cwd(), 'uploads');
+
+const setPdfProxyHeaders = (res: Response) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Content-Security-Policy', 'frame-ancestors *');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+};
+
+/** PDF.js pulls PDFs cross-origin; some CDNs (e.g. Cloudinary) send frame-ancestors 'self' only. Proxied stream avoids iframe/CSP breakage. */
+const extractUploadsRelative = (raw: string): string | null => {
+  const normalized = raw.replace(/\\/g, '/').trim();
+  const idx = normalized.toLowerCase().indexOf('/uploads/');
+  if (idx >= 0) return normalized.slice(idx + '/uploads/'.length);
+  if (/^uploads\//i.test(normalized)) return normalized.slice('uploads/'.length);
+  if (/^\/uploads\//i.test(normalized)) return normalized.slice('/uploads/'.length);
+  return null;
+};
 
 // @desc    Create a book
 // @route   POST /api/books
@@ -13,6 +35,15 @@ export const createBook = async (req: Request, res: Response) => {
 
     if (!files?.['file'] && !content) {
       return res.status(400).json({ message: 'Please provide either a file or write content.' });
+    }
+
+    const needsCloudinaryUpload = !!(files?.['file']?.[0] || files?.['coverImage']?.[0]);
+    if (needsCloudinaryUpload && !isCloudinaryConfigured()) {
+      return res.status(503).json({
+        message:
+          'Cloudinary is not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in the server environment (e.g. Render dashboard).',
+        code: 'CLOUDINARY_NOT_CONFIGURED'
+      });
     }
 
     let fileUrl: string | undefined;
@@ -55,7 +86,119 @@ export const createBook = async (req: Request, res: Response) => {
 
     res.status(201).json(createdBook);
   } catch (error: any) {
-    res.status(400).json({ message: error.message });
+    const msg = typeof error?.message === 'string' ? error.message : 'Upload failed';
+    if (/must supply api_key/i.test(msg)) {
+      return res.status(503).json({
+        message:
+          'Cloudinary rejected the upload (missing credentials). Confirm CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET are set correctly on Render.',
+        code: 'CLOUDINARY_MISSING_API_KEY'
+      });
+    }
+    res.status(400).json({ message: msg });
+  }
+};
+
+/** @route GET /api/books/:id/file */
+export const streamBookFile = async (req: Request, res: Response) => {
+  if (!/^[a-fA-F0-9]{24}$/.test(req.params.id)) {
+    res.status(400).json({ message: 'Invalid book id' });
+    return;
+  }
+
+  const book = await Book.findById(req.params.id).lean<{ fileUrl?: string }>();
+  const fileUrl = book?.fileUrl;
+  if (!book || !fileUrl) {
+    res.status(404).json({ message: 'Book has no downloadable file' });
+    return;
+  }
+
+  try {
+    if (/^https?:\/\//i.test(fileUrl)) {
+      const range = req.headers.range;
+      const headers: Record<string, string> = {};
+      if (range && typeof range === 'string') headers.Range = range;
+
+      const upstream = await fetch(fileUrl, { headers });
+      if (!upstream.ok) {
+        res.status(502).json({ message: 'Could not retrieve file from storage' });
+        return;
+      }
+
+      setPdfProxyHeaders(res);
+
+      const copyHdr = (name: string, dest = name) => {
+        const val = upstream.headers.get(name);
+        if (val) res.setHeader(dest, val);
+      };
+      copyHdr('content-type');
+      copyHdr('content-length');
+      copyHdr('content-range');
+      copyHdr('accept-ranges');
+      copyHdr('etag');
+      copyHdr('cache-control');
+
+      const ct = upstream.headers.get('content-type');
+      if (!ct) res.setHeader('Content-Type', 'application/pdf');
+
+      res.status(upstream.status);
+      const bodyStream = upstream.body;
+      if (!bodyStream) {
+        const buf = await upstream.arrayBuffer();
+        res.end(Buffer.from(buf));
+        return;
+      }
+      Readable.fromWeb(bodyStream as any).pipe(res);
+      return;
+    }
+
+    const uploadsRootAbs = path.resolve(uploadsDirRoot());
+    const rel = extractUploadsRelative(fileUrl);
+    const joinedFromRel =
+      rel !== null && rel.length > 0
+        ? path.resolve(uploadsRootAbs, path.normalize(rel).replace(/^(\.{2}(\/|\\|$))+/, ''))
+        : null;
+    if (joinedFromRel && !joinedFromRel.startsWith(uploadsRootAbs + path.sep) && joinedFromRel !== uploadsRootAbs) {
+      res.status(400).json({ message: 'Invalid file path' });
+      return;
+    }
+
+    let abs: string | null = joinedFromRel;
+    if (!abs) {
+      if (/^uploads?\//i.test(fileUrl.trim()) || /^\/uploads\//i.test(fileUrl.trim())) {
+        abs = null;
+      } else {
+        const bn = path.basename(fileUrl.replace(/\\/g, '/'));
+        abs = bn && bn !== '.' && bn !== '..' ? path.resolve(uploadsRootAbs, bn) : null;
+      }
+    }
+
+    if (!abs) {
+      res.status(404).json({ message: 'File not found or unsupported file reference' });
+      return;
+    }
+
+    if (!abs.startsWith(uploadsRootAbs + path.sep) && abs !== uploadsRootAbs) {
+      res.status(400).json({ message: 'Invalid file path' });
+      return;
+    }
+
+    if (!fs.existsSync(abs)) {
+      res.status(404).json({ message: 'File not found on disk' });
+      return;
+    }
+
+    setPdfProxyHeaders(res);
+    const stat = fs.statSync(abs);
+    const ext = path.extname(abs).toLowerCase();
+    res.setHeader(
+      'Content-Type',
+      ext === '.pdf' ? 'application/pdf' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream'
+    );
+    res.setHeader('Content-Length', String(stat.size));
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    fs.createReadStream(abs).pipe(res);
+  } catch {
+    res.status(500).json({ message: 'Failed to stream file' });
   }
 };
 
