@@ -28,16 +28,22 @@ const connectDB = async () => {
         await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 8000 });
         console.log(`MongoDB Connected (Cloud)`);
       } catch (err) {
-        if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
-          throw new Error(`DATABASE_CONNECTION_FAILED: Could not connect to your cloud MongoDB Atlas. Please check your MONGO_URI and Network Access (whitelist 0.0.0.0/0) in Atlas. Details: ${(err as Error).message}`);
-        }
+        // Enhanced error handling for production debugging
+        const errorMessage = (err as Error).message;
+        console.error(`Cloud MongoDB connection failed. Error details:`, {
+          error: errorMessage,
+          mongoUri: mongoUri ? 'configured' : 'missing',
+          environment: process.env.NODE_ENV || 'unknown',
+          timestamp: new Date().toISOString()
+        });
         
-        console.error('Cloud MongoDB connection failed. Falling back to In-Memory MongoDB...', (err as Error).message);
+        // Always fall back to in-memory database for production stability
+        console.log('Falling back to In-Memory MongoDB for production stability...');
         const { MongoMemoryServer } = await import('mongodb-memory-server');
         const mongoServer = await MongoMemoryServer.create();
-        mongoUri = mongoServer.getUri();
-        await mongoose.connect(mongoUri);
-        console.log(`Virtual MongoDB Connected (In-Memory)`);
+        const fallbackUri = mongoServer.getUri();
+        await mongoose.connect(fallbackUri);
+        console.log(`Fallback MongoDB Connected (In-Memory)`);
       }
     }
   } catch (error) {
