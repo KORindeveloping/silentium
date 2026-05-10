@@ -13,14 +13,14 @@
       "use": "@vercel/node"
     },
     {
-      "src": "api/test.ts",
+      "src": "api/health.ts",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/api/test",
-      "dest": "/api/test.ts"
+      "src": "/api/health",
+      "dest": "/api/health.ts"
     },
     {
       "src": "/api/books",
