@@ -12,10 +12,10 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { url } = req;
+    const { url, query } = req;
     
-    if (url.includes('/api/books')) {
-      // Books endpoint
+    // Books endpoint - handle all book requests
+    if (url && url.includes('/api/books')) {
       const books = [
         {
           _id: '1',
@@ -39,11 +39,21 @@ export default async function handler(req: any, res: any) {
         }
       ];
 
+      // Handle query parameters
+      let filteredBooks = books;
+      if (query.sort === 'latest') {
+        filteredBooks = books.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      } else if (query.sort === 'popular') {
+        filteredBooks = books.sort((a, b) => b.views - a.views);
+      }
+
       return res.status(200).json({
         success: true,
-        books: books,
-        total: books.length,
-        message: 'Online API working!',
+        books: filteredBooks,
+        total: filteredBooks.length,
+        page: Number(query.page) || 1,
+        pages: Math.ceil(filteredBooks.length / 12),
+        message: 'Vercel API working!',
         deployed: new Date().toISOString()
       });
     }
@@ -57,6 +67,7 @@ export default async function handler(req: any, res: any) {
     });
 
   } catch (error: any) {
+    console.error('API Error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Internal Server Error'

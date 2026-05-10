@@ -8,7 +8,11 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
+      "src": "/api/books",
+      "dest": "/api/index.ts"
+    },
+    {
+      "src": "/api/books/(.*)",
       "dest": "/api/index.ts"
     },
     {
