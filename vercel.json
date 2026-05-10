@@ -2,18 +2,14 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/books-simple.ts",
+      "src": "api/index.ts",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/api/books",
-      "dest": "/api/books-simple.ts"
-    },
-    {
-      "src": "/api/books/(.*)",
-      "dest": "/api/books-simple.ts"
+      "src": "/api/(.*)",
+      "dest": "/api/index.ts"
     },
     {
       "src": "/(.*)",
@@ -21,7 +17,7 @@
     }
   ],
   "functions": {
-    "api/books-simple.ts": {
+    "api/index.ts": {
       "maxDuration": 30
     }
   }
