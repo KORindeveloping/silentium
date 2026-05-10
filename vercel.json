@@ -11,9 +11,17 @@
     {
       "src": "api/books.ts",
       "use": "@vercel/node"
+    },
+    {
+      "src": "api/test.ts",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
+    {
+      "src": "/api/test",
+      "dest": "/api/test.ts"
+    },
     {
       "src": "/api/books",
       "dest": "/api/books.ts"
