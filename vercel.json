@@ -2,30 +2,18 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/books.ts",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/health.ts", 
+      "src": "api/books-simple.ts",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/api/health",
-      "dest": "/api/health.ts"
-    },
-    {
       "src": "/api/books",
-      "dest": "/api/books.ts"
+      "dest": "/api/books-simple.ts"
     },
     {
       "src": "/api/books/(.*)",
-      "dest": "/api/books.ts"
-    },
-    {
-      "src": "/assets/(.*)",
-      "dest": "/assets/$1"
+      "dest": "/api/books-simple.ts"
     },
     {
       "src": "/(.*)",
@@ -33,7 +21,7 @@
     }
   ],
   "functions": {
-    "api/books.ts": {
+    "api/books-simple.ts": {
       "maxDuration": 30
     }
   }
