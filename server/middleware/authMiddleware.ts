@@ -16,11 +16,23 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     try {
       token = req.headers.authorization.split(' ')[1];
+      if (!token) {
+        return res.status(401).json({ message: 'Not authorized, token missing' });
+      }
       const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'secret');
       req.user = await User.findById(decoded.id).select('-passwordHash');
+      if (!req.user) {
+        return res.status(401).json({ message: 'Not authorized, user not found' });
+      }
       return next();
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      console.error('JWT Error:', error.message);
+      if (error.name === 'JsonWebTokenError') {
+        return res.status(401).json({ message: 'Not authorized, invalid token' });
+      }
+      if (error.name === 'TokenExpiredError') {
+        return res.status(401).json({ message: 'Not authorized, token expired' });
+      }
       return res.status(401).json({ message: 'Not authorized, token failed' });
     }
   }

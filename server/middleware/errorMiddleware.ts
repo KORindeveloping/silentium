@@ -6,7 +6,7 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
   // Ensure we don't crash the error handler itself
   try {
     const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
-    res.status(statusCode);
+    res.status(statusCode).header('Content-Type', 'application/json');
 
     console.error(`[Server Error] ${req.method} ${req.url}:`, err);
 
@@ -27,6 +27,21 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
       });
     }
 
+    // JWT Errors
+    if (err.name === 'JsonWebTokenError') {
+      return res.status(401).json({
+        message: 'Invalid token',
+        error: 'Authentication failed'
+      });
+    }
+
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({
+        message: 'Token expired',
+        error: 'Authentication failed'
+      });
+    }
+
     // Default Error Response
     res.json({
       message: err.message || 'Internal Server Error',
@@ -36,7 +51,7 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
   } catch (fatalError) {
     console.error('Fatal Error in Error Handler:', fatalError);
     if (!res.headersSent) {
-      res.status(500).json({ message: 'Internal Server Error' });
+      res.status(500).header('Content-Type', 'application/json').json({ message: 'Internal Server Error' });
     }
   }
 };

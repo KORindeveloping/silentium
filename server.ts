@@ -83,7 +83,15 @@ app.use(express.json());
 
 // 2. Ensure DB connection for every request
 app.use(asyncHandler(async (req: any, res: any, next: any) => {
-  await ensureConnection();
+  try {
+    await ensureConnection();
+  } catch (error: any) {
+    console.error('Database connection failed:', error.message);
+    return res.status(500).json({
+      message: 'Database connection failed',
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined
+    });
+  }
   next();
 }));
 
