@@ -97,11 +97,26 @@ app.use(asyncHandler(async (req: any, res: any, next: any) => {
 
 // Root route for health check
 app.get('/', (req, res) => {
-  res.json({ 
+  const healthStatus = {
+    success: true,
     status: 'ok', 
     message: 'Silentium API is running',
-    timestamp: new Date().toISOString()
-  });
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV,
+    uptime: process.uptime(),
+    version: process.env.npm_package_version || 'unknown',
+    render: {
+      serviceId: process.env.RENDER_SERVICE_ID || 'not-on-render',
+      instanceId: process.env.RENDER_INSTANCE_ID || 'not-on-render',
+      externalUrl: process.env.RENDER_EXTERNAL_URL || 'not-on-render'
+    },
+    database: {
+      connected: isConnected,
+      uri: process.env.MONGO_URI ? 'configured' : 'not-configured'
+    }
+  };
+
+  res.header('Content-Type', 'application/json').json(healthStatus);
 });
 
 // Test endpoint to create a sample file
@@ -181,6 +196,17 @@ app.use('/api/documents', bookRoutes);
 
 // 5. Frontend / Vite
 const setupFrontend = async () => {
+  // Log startup information for debugging
+  console.log('=== Silentium Server Startup ===');
+  console.log('Environment:', process.env.NODE_ENV);
+  console.log('Platform:', process.platform);
+  console.log('Node Version:', process.version);
+  console.log('Working Directory:', process.cwd());
+  console.log('Render Service:', process.env.RENDER_SERVICE_ID || 'Not running on Render');
+  console.log('Mongo URI configured:', !!process.env.MONGO_URI);
+  console.log('JWT Secret configured:', !!process.env.JWT_SECRET);
+  console.log('================================');
+
   if (isDev && !process.env.VERCEL) {
     try {
       const vite = await createViteServer({
@@ -188,6 +214,7 @@ const setupFrontend = async () => {
         appType: 'spa',
       });
       app.use(vite.middlewares);
+      console.log('Vite development server configured');
     } catch (err) {
       console.error('Vite Server Error:', err);
     }
@@ -199,10 +226,16 @@ const setupFrontend = async () => {
         if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) return next();
         res.sendFile(path.join(distPath, 'index.html'));
       });
+      console.log('Static files serving from:', distPath);
     } else {
+      console.warn('Dist directory not found:', distPath);
       app.get('*', (req, res, next) => {
         if (req.path.startsWith('/api')) return next();
-        res.status(404).json({ message: 'The application is still initializing. Please wait a moment.' });
+        res.status(404).json({ 
+          success: false,
+          message: 'The application is still initializing. Please wait a moment.',
+          code: 'APP_NOT_READY'
+        });
       });
     }
   }
@@ -212,9 +245,19 @@ const setupFrontend = async () => {
 
   if (!process.env.VERCEL) {
     const PORT = Number(process.env.PORT) || 3000;
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Professional server running at http://localhost:${PORT}`);
+    const HOST = process.env.RENDER ? '0.0.0.0' : 'localhost';
+    
+    app.listen(PORT, HOST, () => {
+      console.log(`=== Server Started Successfully ===`);
+      console.log(`URL: http://${HOST}:${PORT}`);
       console.log(`Mode: ${isDev ? 'Development' : 'Production'}`);
+      console.log(`Health check available at: http://${HOST}:${PORT}/`);
+      console.log(`================================`);
+    }).on('error', (err: any) => {
+      console.error('Failed to start server:', err);
+      if (err.code === 'EADDRINUSE') {
+        console.error(`Port ${PORT} is already in use`);
+      }
     });
   }
 };
