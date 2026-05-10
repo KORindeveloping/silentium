@@ -4,6 +4,7 @@ import { Book, Edit2, Trash2, Eye, Heart, MoreVertical, Search, Plus, Archive, F
 import { Link, useNavigate } from 'react-router-dom';
 import { Book as BookType } from '../types';
 import { API_BASE_URL } from '../config';
+import { fetchJson, HttpError } from '../lib/http';
 
 export const Library: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'published' | 'draft' | 'archived'>('published');
@@ -26,22 +27,19 @@ export const Library: React.FC = () => {
         return;
       }
 
-      const userRes = await fetch(`${API_BASE_URL}/api/auth/me`, { headers: { 'Authorization': `Bearer ${token}` } });
-      if (userRes.status === 401) {
-        localStorage.removeItem('token');
-        setLoading(false);
-        return;
-      }
-      if (!userRes.ok) throw new Error('Auth failed');
-      const userData = await userRes.json();
-      
-      const res = await fetch(`${API_BASE_URL}/api/books?authorId=${userData._id}&status=${activeTab}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const userData = await fetchJson<{ _id: string }>(`${API_BASE_URL}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
-      if (!res.ok) throw new Error('Fetch failed');
-      const data = await res.json();
+      
+      const data = await fetchJson<{ books?: BookType[] }>(`${API_BASE_URL}/api/books?authorId=${userData._id}&status=${activeTab}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setBooks(data.books || []);
     } catch (error) {
+      if (error instanceof HttpError && error.status === 401) {
+        localStorage.removeItem('token');
+        return;
+      }
       console.error('Failed to fetch library', error);
     } finally {
       setLoading(false);
@@ -52,9 +50,9 @@ export const Library: React.FC = () => {
     if (!deleteId) return;
     try {
       const token = localStorage.getItem('token');
-      await fetch(`${API_BASE_URL}/api/books/${deleteId}`, {
+      await fetchJson<{ message: string }>(`${API_BASE_URL}/api/books/${deleteId}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` }
       });
       setBooks(books.filter(b => b._id !== deleteId));
       setDeleteId(null);

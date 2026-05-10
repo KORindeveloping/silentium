@@ -3,18 +3,28 @@ import { motion } from 'motion/react';
 import { Shield, Check, X, AlertCircle, TrendingUp } from 'lucide-react';
 import { Document } from '../types';
 import { API_BASE_URL } from '../config';
+import { fetchJson } from '../lib/http';
 
 export const AdminPanel: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
   const [docs, setDocs] = useState<Document[]>([]);
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/api/admin/stats`).then(res => res.json()).then(setStats);
-    fetch(`${API_BASE_URL}/api/admin/documents`).then(res => res.json()).then(setDocs);
+    const load = async () => {
+      try {
+        const statsData = await fetchJson<any>(`${API_BASE_URL}/api/admin/stats`);
+        const docsData = await fetchJson<Document[]>(`${API_BASE_URL}/api/admin/documents`);
+        setStats(statsData);
+        setDocs(docsData);
+      } catch (error) {
+        console.error('Failed to load admin data', error);
+      }
+    };
+    load();
   }, []);
 
   const updateStatus = async (id: string, status: string) => {
-    await fetch(`${API_BASE_URL}/api/admin/documents/${id}/status`, {
+    await fetchJson(`${API_BASE_URL}/api/admin/documents/${id}/status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status })

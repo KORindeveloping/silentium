@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { BookCard } from '../components/BookCard';
 import { Book, Category } from '../types';
 import { API_BASE_URL } from '../config';
+import { fetchJson } from '../lib/http';
 
 export const Home: React.FC = () => {
   const [books, setBooks] = useState<Book[]>([]);
@@ -38,8 +39,7 @@ export const Home: React.FC = () => {
       if (category !== 'All') queryParams.append('category', category);
       queryParams.append('sort', sortBy);
       
-      const res = await fetch(`${API_BASE_URL}/api/books?${queryParams.toString()}`);
-      const data = await res.json();
+      const data = await fetchJson<{ books?: Book[] }>(`${API_BASE_URL}/api/books?${queryParams.toString()}`);
       setBooks(data.books || []);
     } catch (error) {
       console.error('Failed to fetch books', error);
@@ -52,8 +52,7 @@ export const Home: React.FC = () => {
     setLoadingCategory(true);
     setSelectedCategory(cat);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/books?category=${cat}&limit=6`);
-      const data = await res.json();
+      const data = await fetchJson<{ books?: Book[] }>(`${API_BASE_URL}/api/books?category=${cat}&limit=6`);
       setCategoryBooks(data.books || []);
     } catch (error) {
       console.error('Failed to fetch category books', error);

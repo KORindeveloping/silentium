@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { AuthModal } from '../components/AuthModal';
 import { pdfjs } from 'react-pdf';
 import { API_BASE_URL } from '../config';
+import { fetchJson } from '../lib/http';
 
 // Configure PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -36,16 +37,12 @@ export const UploadPage: React.FC = () => {
       const token = localStorage.getItem('token');
       if (token) {
         try {
-          const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+          const data = await fetchJson<any>(`${API_BASE_URL}/api/auth/me`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
-          if (res.ok) {
-            const data = await res.json();
-            setUser(data);
-          } else {
-            localStorage.removeItem('token');
-          }
+          setUser(data);
         } catch (err) {
+          localStorage.removeItem('token');
           console.error('Failed to fetch user', err);
         }
       }

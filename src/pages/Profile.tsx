@@ -18,6 +18,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { API_BASE_URL } from '../config';
+import { fetchJson, HttpError } from '../lib/http';
 
 interface UserProfile {
   _id: string;
@@ -68,26 +69,22 @@ export const Profile = () => {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+      const data = await fetchJson<UserProfile>(`${API_BASE_URL}/api/auth/me`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      if (res.status === 401) {
+      setUser(data);
+      setFormData({
+        name: data.name || '',
+        username: data.username || '',
+        phone: data.phone || '',
+        bio: data.bio || '',
+        location: data.location || '',
+      });
+    } catch (err) {
+      if (err instanceof HttpError && err.status === 401) {
         localStorage.removeItem('token');
         return;
       }
-      if (!res.ok) throw new Error('Failed to fetch profile');
-      const data = await res.json();
-      if (res.ok) {
-        setUser(data);
-        setFormData({
-          name: data.name || '',
-          username: data.username || '',
-          phone: data.phone || '',
-          bio: data.bio || '',
-          location: data.location || '',
-        });
-      }
-    } catch (err) {
       setError('Failed to load profile');
     } finally {
       setIsLoading(false);
@@ -139,15 +136,13 @@ export const Profile = () => {
         formDataToSend.append('avatar', avatarFile);
       }
 
-      const res = await fetch(`${API_BASE_URL}/api/auth/profile`, {
+      const data = await fetchJson<UserProfile>(`${API_BASE_URL}/api/auth/profile`, {
         method: 'PUT',
         headers: { 
           Authorization: `Bearer ${token}` 
         },
         body: formDataToSend
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
       
       setUser(data);
       setSuccess('Profile updated successfully');
@@ -169,14 +164,12 @@ export const Profile = () => {
   const handleDeleteAccount = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`${API_BASE_URL}/api/auth/profile`, {
+      await fetchJson(`${API_BASE_URL}/api/auth/profile`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
-      if (res.ok) {
-        localStorage.removeItem('token');
-        window.location.href = '/';
-      }
+      localStorage.removeItem('token');
+      window.location.href = '/';
     } catch (err) {
       setError('Failed to delete account');
     }

@@ -5,6 +5,7 @@ import { DollarSign, Eye, Clock, Book, ArrowUpRight, History, CheckCircle2, Aler
 import { useNavigate } from 'react-router-dom';
 import { AuthorStats } from '../types';
 import { API_BASE_URL } from '../config';
+import { fetchJson, HttpError } from '../lib/http';
 
 export const AuthorDashboard: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
@@ -26,37 +27,28 @@ export const AuthorDashboard: React.FC = () => {
       }
 
       const headers = {
-        'Authorization': `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json'
       };
 
       // Get user ID first
-      const meRes = await fetch(`${API_BASE_URL}/api/auth/me`, { headers });
-      if (meRes.status === 401) {
+      const meData = await fetchJson<{ _id: string }>(`${API_BASE_URL}/api/auth/me`, { headers });
+      const authorId = meData._id;
+
+      // Fetch stats
+      const statsData = await fetchJson<any>(`${API_BASE_URL}/api/analytics/stats`, { headers });
+      setStats(statsData);
+
+      // Fetch books by this author
+      const docsData = await fetchJson<{ books?: any[] }>(`${API_BASE_URL}/api/books?authorId=${authorId}`, { headers });
+      setMyDocs(docsData.books || []);
+
+    } catch (err: any) {
+      if (err instanceof HttpError && err.status === 401) {
         localStorage.removeItem('token');
         setError('Session expired. Please login again.');
         return;
       }
-      if (!meRes.ok) throw new Error('Failed to authenticate');
-      const meData = await meRes.json();
-      const authorId = meData._id;
-
-      // Fetch stats
-      const statsRes = await fetch(`${API_BASE_URL}/api/analytics/stats`, { headers });
-      const statsData = await statsRes.json();
-      
-      if (!statsRes.ok) throw new Error(statsData.message || 'Failed to fetch stats');
-      
-      setStats(statsData);
-
-      // Fetch books by this author
-      const docsRes = await fetch(`${API_BASE_URL}/api/books?authorId=${authorId}`, { headers }); 
-      const docsData = await docsRes.json();
-      
-      if (!docsRes.ok) throw new Error(docsData.message || 'Failed to fetch documents');
-      setMyDocs(docsData.books || []);
-
-    } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
@@ -74,16 +66,13 @@ export const AuthorDashboard: React.FC = () => {
     setError(null);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`${API_BASE_URL}/api/analytics/payout`, {
+      const data = await fetchJson<{ amount: number }>(`${API_BASE_URL}/api/analytics/payout`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
-      const data = await res.json();
-      
-      if (!res.ok) throw new Error(data.message || 'Payout request failed');
       
       setPayoutSuccess(`Successfully requested $${data.amount.toFixed(2)}`);
       fetchData(); // Refresh stats
