@@ -51,8 +51,19 @@ export const createBook = async (req: Request, res: Response) => {
 
     // Upload File (PDF/Doc)
     if (files?.['file']?.[0]) {
-      const result = await uploadToCloudinary(files['file'][0].path, 'books/files');
-      fileUrl = result.secure_url;
+      const file = files['file'][0];
+      const fileSizeMB = file.size / (1024 * 1024);
+      
+      if (fileSizeMB > 10) {
+        // Use local storage for files >10MB (Cloudinary limit)
+        const baseUrl = process.env.APP_URL || 'http://localhost:3000';
+        fileUrl = `${baseUrl}/uploads/${file.filename}`;
+        console.log(`Large file (${fileSizeMB.toFixed(1)}MB) stored locally: ${file.filename}`);
+      } else {
+        // Use Cloudinary for smaller files
+        const result = await uploadToCloudinary(file.path, 'books/files');
+        fileUrl = result.secure_url;
+      }
     }
 
     // Upload Cover Image
@@ -87,6 +98,15 @@ export const createBook = async (req: Request, res: Response) => {
     res.status(201).json(createdBook);
   } catch (error: any) {
     const msg = typeof error?.message === 'string' ? error.message : 'Upload failed';
+    
+    // Handle file size limit errors (now 50MB)
+    if (msg.includes('File size too large') || msg.includes('file size') || msg.includes('LIMIT_FILE_SIZE')) {
+      return res.status(413).json({
+        message: 'File size too large. Maximum file size is 50MB for book documents.',
+        code: 'FILE_TOO_LARGE'
+      });
+    }
+    
     if (/must supply api_key/i.test(msg)) {
       return res.status(503).json({
         message:
