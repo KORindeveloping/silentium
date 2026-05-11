@@ -49,20 +49,23 @@ export const createBook = async (req: Request, res: Response) => {
     let fileUrl: string | undefined;
     let coverImageUrl: string | undefined;
 
-    // Upload File (PDF/Doc)
+    // Upload File (PDF/Doc) - Always use Cloudinary for permanent storage
     if (files?.['file']?.[0]) {
       const file = files['file'][0];
       const fileSizeMB = file.size / (1024 * 1024);
       
-      if (fileSizeMB > 10) {
-        // Use local storage for files >10MB (Cloudinary limit)
-        const baseUrl = 'https://silentium-m9z8.onrender.com';
-        fileUrl = `${baseUrl}/uploads/${file.filename}`;
-        console.log(`Large file (${fileSizeMB.toFixed(1)}MB) stored locally: ${file.filename}`);
-      } else {
-        // Use Cloudinary for smaller files
+      try {
+        // Always upload to Cloudinary for permanent storage
         const result = await uploadToCloudinary(file.path, 'books/files');
         fileUrl = result.secure_url;
+        console.log(`File (${fileSizeMB.toFixed(1)}MB) uploaded to Cloudinary: ${result.secure_url}`);
+        
+        // Clean up temporary file
+        const fs = await import('fs');
+        fs.unlinkSync(file.path);
+      } catch (error) {
+        console.error('Cloudinary upload failed:', error);
+        throw new Error('Failed to upload file to cloud storage. Please try again.');
       }
     }
 
@@ -132,94 +135,8 @@ export const streamBookFile = async (req: Request, res: Response) => {
     return;
   }
 
-  try {
-    if (/^https?:\/\//i.test(fileUrl)) {
-      const range = req.headers.range;
-      const headers: Record<string, string> = {};
-      if (range && typeof range === 'string') headers.Range = range;
-
-      const upstream = await fetch(fileUrl, { headers });
-      if (!upstream.ok) {
-        res.status(502).json({ message: 'Could not retrieve file from storage' });
-        return;
-      }
-
-      setPdfProxyHeaders(res);
-
-      const copyHdr = (name: string, dest = name) => {
-        const val = upstream.headers.get(name);
-        if (val) res.setHeader(dest, val);
-      };
-      copyHdr('content-type');
-      copyHdr('content-length');
-      copyHdr('content-range');
-      copyHdr('accept-ranges');
-      copyHdr('etag');
-      copyHdr('cache-control');
-
-      const ct = upstream.headers.get('content-type');
-      if (!ct) res.setHeader('Content-Type', 'application/pdf');
-
-      res.status(upstream.status);
-      const bodyStream = upstream.body;
-      if (!bodyStream) {
-        const buf = await upstream.arrayBuffer();
-        res.end(Buffer.from(buf));
-        return;
-      }
-      Readable.fromWeb(bodyStream as any).pipe(res);
-      return;
-    }
-
-    const uploadsRootAbs = path.resolve(uploadsDirRoot());
-    const rel = extractUploadsRelative(fileUrl);
-    const joinedFromRel =
-      rel !== null && rel.length > 0
-        ? path.resolve(uploadsRootAbs, path.normalize(rel).replace(/^(\.{2}(\/|\\|$))+/, ''))
-        : null;
-    if (joinedFromRel && !joinedFromRel.startsWith(uploadsRootAbs + path.sep) && joinedFromRel !== uploadsRootAbs) {
-      res.status(400).json({ message: 'Invalid file path' });
-      return;
-    }
-
-    let abs: string | null = joinedFromRel;
-    if (!abs) {
-      if (/^uploads?\//i.test(fileUrl.trim()) || /^\/uploads\//i.test(fileUrl.trim())) {
-        abs = null;
-      } else {
-        const bn = path.basename(fileUrl.replace(/\\/g, '/'));
-        abs = bn && bn !== '.' && bn !== '..' ? path.resolve(uploadsRootAbs, bn) : null;
-      }
-    }
-
-    if (!abs) {
-      res.status(404).json({ message: 'File not found or unsupported file reference' });
-      return;
-    }
-
-    if (!abs.startsWith(uploadsRootAbs + path.sep) && abs !== uploadsRootAbs) {
-      res.status(400).json({ message: 'Invalid file path' });
-      return;
-    }
-
-    if (!fs.existsSync(abs)) {
-      res.status(404).json({ message: 'File not found on disk' });
-      return;
-    }
-
-    setPdfProxyHeaders(res);
-    const stat = fs.statSync(abs);
-    const ext = path.extname(abs).toLowerCase();
-    res.setHeader(
-      'Content-Type',
-      ext === '.pdf' ? 'application/pdf' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream'
-    );
-    res.setHeader('Content-Length', String(stat.size));
-    res.setHeader('Cache-Control', 'private, max-age=3600');
-    fs.createReadStream(abs).pipe(res);
-  } catch {
-    res.status(500).json({ message: 'Failed to stream file' });
-  }
+  // Redirect to Cloudinary URL directly for permanent cloud storage
+  res.redirect(302, fileUrl);
 };
 
 // @desc    Get all books

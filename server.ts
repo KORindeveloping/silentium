@@ -170,42 +170,8 @@ try {
   console.error('Error setting up uploads directory:', error);
 }
 
-// Handle OPTIONS preflight requests for uploads
-app.options('/uploads/*', (req, res) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Max-Age', '86400'); // 24 hours
-  res.sendStatus(200);
-});
-
-// Serve uploads with proper headers and caching
-app.use('/uploads', (req, res, next) => {
-  console.log('Upload request:', req.path, 'Full URL:', req.originalUrl);
-  // Add comprehensive CORS headers for cross-origin access
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
-  res.header('Cross-Origin-Resource-Policy', 'cross-origin');
-  res.header('Cross-Origin-Embedder-Policy', 'unsafe-none');
-  res.header('Cross-Origin-Opener-Policy', 'unsafe-none');
-  next();
-}, express.static(uploadsDir, {
-  maxAge: '1d',
-  etag: true,
-  lastModified: true,
-  setHeaders: (res, path, stat) => {
-    // Set comprehensive headers for PDF files
-    if (path.endsWith('.pdf')) {
-      res.header('Content-Type', 'application/pdf');
-      res.header('Access-Control-Allow-Origin', '*');
-      res.header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-      res.header('Cross-Origin-Resource-Policy', 'cross-origin');
-      res.header('Content-Disposition', 'inline');
-    }
-  }
-}));
+// Note: All files are now stored in Cloudinary for permanent storage
+// Local uploads route removed to prevent data loss on redeploys
 
 // 4. API Routes
 app.use('/api/auth', authRoutes);

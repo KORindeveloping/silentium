@@ -3,9 +3,10 @@ import { Upload as UploadIcon, FileText, X, AlertCircle, Image as ImageIcon, Eye
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { AuthModal } from '../components/AuthModal';
-import { pdfjs } from 'react-pdf';
-import { API_BASE_URL } from '../config';
 import { fetchJson } from '../lib/http';
+import { useAuth } from '../contexts/AuthContext';
+import { API_BASE_URL } from '../config';
+import { pdfjs } from 'react-pdf';
 
 // Configure PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -27,27 +28,14 @@ export const UploadPage: React.FC = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const { user, token, login } = useAuth();
   const [error, setError] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchUser = async () => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        try {
-          const data = await fetchJson<any>(`${API_BASE_URL}/api/auth/me`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          setUser(data);
-        } catch (err) {
-          localStorage.removeItem('token');
-          console.error('Failed to fetch user', err);
-        }
-      }
-    };
-    fetchUser();
+    // User state is now managed by AuthContext
+    // No need for manual auth checking
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

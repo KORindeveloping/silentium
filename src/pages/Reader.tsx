@@ -7,6 +7,7 @@ import { pdfjs, Document, Page } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { API_BASE_URL } from '../config';
+import { useAuth } from '../contexts/AuthContext';
 
 // Configure PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -28,15 +29,12 @@ export const Reader: React.FC = () => {
   const showBlur = isLocked && currentPage >= PREVIEW_LIMIT;
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+    const { user, token, login } = useAuth();
 
-    fetch(`${API_BASE_URL}/api/auth/me`, { headers })
-      .then(res => res.json())
-      .then(data => {
-        if (data._id) setUser(data);
-      })
-      .catch(() => {});
+    // Set user from auth context if available
+    if (user && token) {
+      setUser(user);
+    }
 
     fetch(`${API_BASE_URL}/api/books/${id}`)
       .then(res => res.json())
@@ -121,9 +119,8 @@ export const Reader: React.FC = () => {
               <Document
                 file={(() => {
                   if (!doc.fileUrl || !id) return null;
-                  // Always load via API proxy so CSP frame-ancestors on CDNs does not block PDF.js.
-                  const baseUrl = (API_BASE_URL || window.location.origin).replace(/\/$/, '');
-                  return `${baseUrl}/api/books/${id}/file`;
+                  // Use direct Cloudinary URL for permanent cloud storage
+                  return doc.fileUrl;
                 })()}
                 onLoadSuccess={onDocumentLoadSuccess}
                 onLoadError={onDocumentLoadError}
