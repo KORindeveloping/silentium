@@ -141,13 +141,22 @@ export const Reader: React.FC = () => {
                   error={
                     <div className="text-center p-20">
                       <p className="text-red-400 uppercase tracking-widest text-xs mb-4">Failed to load PDF</p>
-                      <p className="text-muted-gray text-[10px] max-w-xs mx-auto">{error || 'Unknown error occurred while loading the document.'}</p>
-                      <button 
-                        onClick={() => window.location.reload()}
-                        className="mt-6 px-6 py-2 bg-white/5 border border-white/10 rounded-full text-[10px] uppercase tracking-widest hover:bg-white/10 transition-all"
-                      >
-                        Retry
-                      </button>
+                      <p className="text-muted-gray text-[10px] max-w-xs mx-auto mb-6">{error || 'Unknown error occurred while loading the document.'}</p>
+                      <div className="flex gap-4 justify-center">
+                        <button 
+                          onClick={() => window.location.reload()}
+                          className="px-6 py-2 bg-white/5 border border-white/10 rounded-full text-[10px] uppercase tracking-widest hover:bg-white/10 transition-all"
+                        >
+                          Retry
+                        </button>
+                        <a 
+                          href={`${API_BASE_URL}/api/books/${id}/file`}
+                          download
+                          className="px-6 py-2 bg-soft-white text-void rounded-full text-[10px] uppercase tracking-widest hover:bg-white transition-all inline-block"
+                        >
+                          Download
+                        </a>
+                      </div>
                     </div>
                   }
                   className="shadow-2xl"

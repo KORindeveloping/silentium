@@ -115,10 +115,17 @@ export const createBook = async (req: Request, res: Response) => {
 
     res.status(201).json(createdBook);
   } catch (error: any) {
-    console.error('Upload error details:', error);
+    console.error('Upload error details:', {
+      error: error?.message || error,
+      stack: error?.stack,
+      timestamp: new Date().toISOString(),
+      userAgent: req.get('User-Agent'),
+      ip: req.ip
+    });
+    
     const msg = typeof error?.message === 'string' ? error.message : 'Upload failed';
 
-    // Handle file size limit errors (now 10MB)
+    // Handle file size limit errors (now 50MB)
     // Handle file size limit errors
     if (msg.includes('File size too large') || msg.includes('file size') || msg.includes('LIMIT_FILE_SIZE')) {
       return res.status(413).json({
@@ -154,89 +161,115 @@ export const createBook = async (req: Request, res: Response) => {
 
 /** @route GET /api/books/:id/file */
 export const streamBookFile = async (req: Request, res: Response) => {
-  if (!/^[a-fA-F0-9]{24}$/.test(req.params.id)) {
-    res.status(400).json({ message: 'Invalid book id' });
-    return;
-  }
+  try {
+    if (!/^[a-fA-F0-9]{24}$/.test(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid book id' });
+    }
 
-  const book = await Book.findById(req.params.id).lean<{ fileUrl?: string, title?: string }>();
-  const fileUrl = book?.fileUrl;
-  if (!book || !fileUrl) {
-    res.status(404).json({ message: 'Book has no downloadable file' });
-    return;
-  }
+    const book = await Book.findById(req.params.id).lean<{ fileUrl?: string, title?: string }>();
+    const fileUrl = book?.fileUrl;
+    
+    if (!book || !fileUrl) {
+      console.warn(`[Proxy] Book or fileUrl not found for ID: ${req.params.id}`);
+      return res.status(404).json({ message: 'Book has no downloadable file' });
+    }
 
-  const isCloudinary = fileUrl.includes('res.cloudinary.com');
-  const relativePath = extractUploadsRelative(fileUrl);
+    console.log(`[Proxy] Request for ${book.title} (${req.params.id})`);
+    console.log(`[Proxy] Target URL: ${fileUrl}`);
 
-  // Set comprehensive CORS headers for PDF.js compatibility
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization');
-  res.setHeader('Accept-Ranges', 'bytes');
-  res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
-  
-  // Optional: Set filename for downloads
-  const fileName = (book.title || 'document').replace(/[^a-z0-9]/gi, '_').toLowerCase();
-  res.setHeader('Content-Disposition', `inline; filename="${fileName}.pdf"`);
+    const isCloudinary = fileUrl.includes('cloudinary');
+    const relativePath = extractUploadsRelative(fileUrl);
 
-  if (isCloudinary) {
-    try {
-      console.log(`Proxying Cloudinary file: ${fileUrl}`);
-      
-      // Add transformation to ensure raw file access
-      const rawUrl = fileUrl.replace(/\/upload\//, '/upload/fl_attachment/').replace(/\.[^.]+$/, '');
-      const response = await fetch(rawUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; Silentium-PDF-Viewer)',
-          'Accept': 'application/pdf,*/*'
+    // Set headers to allow PDF display and handle CORS
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization');
+    res.setHeader('Accept-Ranges', 'bytes');
+    
+    const fileName = (book.title || 'document').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    res.setHeader('Content-Disposition', `inline; filename="${fileName}.pdf"`);
+
+    if (isCloudinary) {
+      try {
+        console.log(`[Proxy] Attempting to stream Cloudinary file...`);
+        
+        // Attempt 1: Direct fetch
+        let response = await fetch(fileUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; Silentium-PDF-Viewer)',
+            'Accept': 'application/pdf,*/*'
+          }
+        });
+        
+        // Attempt 2: If 401, try to generate a signed URL (in case it's a private asset)
+        if (response.status === 401 && isCloudinaryConfigured()) {
+          console.log(`[Proxy] 401 Unauthorized from Cloudinary. Attempting signed URL fallback...`);
+          // URL format: https://res.cloudinary.com/<cloud>/raw/upload/v<version>/<folder>/<id>.<ext>
+          const parts = fileUrl.split('/');
+          const uploadIdx = parts.indexOf('upload');
+          if (uploadIdx !== -1 && uploadIdx + 2 < parts.length) {
+             const publicIdWithExt = parts.slice(uploadIdx + 2).join('/');
+             const publicId = publicIdWithExt.split('.')[0];
+             
+             const { v2: cloudinary } = await import('cloudinary');
+             const signedUrl = cloudinary.url(publicId, {
+               resource_type: 'raw',
+               secure: true,
+               sign_url: true
+             });
+             
+             console.log(`[Proxy] Generated signed URL: ${signedUrl}`);
+             response = await fetch(signedUrl);
+          }
         }
-      });
-      
-      if (!response.ok) {
-        console.error(`Cloudinary fetch failed: ${response.status} ${response.statusText}`);
-        return res.status(response.status).json({ 
-          message: `Failed to fetch file from cloud storage (${response.status})`,
-          url: rawUrl,
-          error: response.statusText
-        });
+
+        if (!response.ok) {
+          console.error(`[Proxy] Cloudinary fetch failed after all attempts: ${response.status} ${response.statusText}`);
+          return res.status(response.status).json({ 
+            message: 'Failed to fetch file from cloud storage',
+            cloudinaryStatus: response.status,
+            targetUrl: fileUrl
+          });
+        }
+        
+        if (response.body) {
+          console.log(`[Proxy] Successfully established stream for ${book.title}`);
+          (response.body as any).pipe(res);
+        } else {
+          res.status(500).json({ message: 'Cloud storage response has no body' });
+        }
+      } catch (error: any) {
+        console.error('[Proxy] Error (Cloudinary):', error);
+        if (!res.headersSent) {
+          res.status(500).json({ message: 'Error streaming from cloud storage', error: error.message });
+        }
       }
-      
-      if (response.body) {
-        res.status(response.status);
-        response.body.pipe(res);
+    } else if (relativePath) {
+      const localPath = path.join(uploadsDirRoot(), relativePath);
+      console.log(`[Proxy] Streaming local file: ${localPath}`);
+      if (fs.existsSync(localPath)) {
+        const stream = fs.createReadStream(localPath);
+        stream.on('error', (err) => {
+          console.error('[Proxy] Local Stream Error:', err);
+          if (!res.headersSent) res.status(500).send('Error reading local file');
+        });
+        stream.pipe(res);
       } else {
-        res.status(500).json({ message: 'Cloud storage response has no body' });
+        console.warn(`[Proxy] Local file not found: ${localPath}`);
+        res.status(404).json({ message: 'Local file not found' });
       }
-    } catch (error: any) {
-      console.error('Proxy Error (Cloudinary):', error);
-      if (!res.headersSent) {
-        res.status(500).json({ 
-          message: 'Error streaming from cloud storage',
-          error: error.message 
-        });
-      }
-    }
-  } else if (relativePath) {
-    const localPath = path.join(uploadsDirRoot(), relativePath);
-    console.log(`Streaming local file: ${localPath}`);
-    if (fs.existsSync(localPath)) {
-      const stream = fs.createReadStream(localPath);
-      stream.on('error', (err) => {
-        console.error('Local Stream Error:', err);
-        if (!res.headersSent) res.status(500).send('Error reading local file');
-      });
-      stream.pipe(res);
     } else {
-      console.warn(`Local file not found: ${localPath}`);
-      res.status(404).json({ message: 'Local file not found' });
+      // Final fallback: Use redirect only if we cannot handle it any other way
+      console.log(`[Proxy] Fallback: Redirecting to ${fileUrl}`);
+      res.redirect(302, fileUrl);
     }
-  } else {
-    // Fallback: Redirect if we can't handle it
-    console.log(`Fallback redirect to: ${fileUrl}`);
-    res.redirect(302, fileUrl);
+  } catch (globalError: any) {
+    console.error('[Proxy] Fatal error:', globalError);
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Internal server error in PDF proxy', error: globalError.message });
+    }
   }
 };
 

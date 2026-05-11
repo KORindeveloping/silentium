@@ -38,15 +38,27 @@ export const UploadPage: React.FC = () => {
     // No need for manual auth checking
   }, []);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0];
     if (selectedFile) {
-      if (selectedFile.size > 50 * 1024 * 1024) {
-        setError('File is too large. Maximum size is 50MB.');
+      // Client-side validation
+      const maxSize = 50 * 1024 * 1024; // 50MB
+      const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/epub+zip', 'image/jpeg', 'image/png', 'image/webp'];
+      
+      if (!allowedTypes.includes(selectedFile.type)) {
+        setError('Invalid file type. Only PDFs, Word documents, EPUB, and images are allowed.');
         setFile(null);
-        setPreviewUrl(null);
+        setPreviewUrl('');
         return;
       }
+      
+      if (selectedFile.size > maxSize) {
+        setError('File size too large. Maximum file size is 50MB.');
+        setFile(null);
+        setPreviewUrl('');
+        return;
+      }
+      
       setError('');
       setFile(selectedFile);
       if (!title) setTitle(selectedFile.name.split('.')[0]);
@@ -54,7 +66,7 @@ export const UploadPage: React.FC = () => {
         const url = URL.createObjectURL(selectedFile);
         setPreviewUrl(url);
       } else {
-        setPreviewUrl(null);
+        setPreviewUrl('');
       }
     }
   };
@@ -212,7 +224,7 @@ export const UploadPage: React.FC = () => {
         isOpen={isAuthModalOpen} 
         onClose={() => setIsAuthModalOpen(false)} 
         onSuccess={(token, userData) => {
-          setUser(userData);
+          login(userData, token);
           setError('');
         }}
       />
