@@ -119,9 +119,10 @@ export const createBook = async (req: Request, res: Response) => {
     const msg = typeof error?.message === 'string' ? error.message : 'Upload failed';
 
     // Handle file size limit errors (now 10MB)
+    // Handle file size limit errors
     if (msg.includes('File size too large') || msg.includes('file size') || msg.includes('LIMIT_FILE_SIZE')) {
       return res.status(413).json({
-        message: 'File size too large. Maximum file size is 10MB for book documents (Cloudinary Free Tier limit).',
+        message: 'File size too large. Maximum file size is 50MB.',
         code: 'FILE_TOO_LARGE'
       });
     }
@@ -168,10 +169,14 @@ export const streamBookFile = async (req: Request, res: Response) => {
   const isCloudinary = fileUrl.includes('res.cloudinary.com');
   const relativePath = extractUploadsRelative(fileUrl);
 
-  // Set headers to allow PDF display and handle CORS
+  // Set comprehensive CORS headers for PDF.js compatibility
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization');
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
   
   // Optional: Set filename for downloads
   const fileName = (book.title || 'document').replace(/[^a-z0-9]/gi, '_').toLowerCase();
@@ -180,24 +185,38 @@ export const streamBookFile = async (req: Request, res: Response) => {
   if (isCloudinary) {
     try {
       console.log(`Proxying Cloudinary file: ${fileUrl}`);
-      const response = await fetch(fileUrl);
+      
+      // Add transformation to ensure raw file access
+      const rawUrl = fileUrl.replace(/\/upload\//, '/upload/fl_attachment/').replace(/\.[^.]+$/, '');
+      const response = await fetch(rawUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; Silentium-PDF-Viewer)',
+          'Accept': 'application/pdf,*/*'
+        }
+      });
+      
       if (!response.ok) {
         console.error(`Cloudinary fetch failed: ${response.status} ${response.statusText}`);
-        return res.status(response.status).json({ message: 'Failed to fetch file from cloud storage' });
+        return res.status(response.status).json({ 
+          message: `Failed to fetch file from cloud storage (${response.status})`,
+          url: rawUrl,
+          error: response.statusText
+        });
       }
       
       if (response.body) {
-        // node-fetch 3.x body is a standard ReadableStream in ESM, 
-        // but it often provides a pipe method for compatibility or we can wrap it.
-        // In Node 18+, we can also use stream.Readable.fromWeb(response.body as any).pipe(res);
-        (response.body as any).pipe(res);
+        res.status(response.status);
+        response.body.pipe(res);
       } else {
         res.status(500).json({ message: 'Cloud storage response has no body' });
       }
     } catch (error: any) {
       console.error('Proxy Error (Cloudinary):', error);
       if (!res.headersSent) {
-        res.status(500).json({ message: 'Error streaming from cloud storage' });
+        res.status(500).json({ 
+          message: 'Error streaming from cloud storage',
+          error: error.message 
+        });
       }
     }
   } else if (relativePath) {

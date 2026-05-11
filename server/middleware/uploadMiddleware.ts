@@ -38,7 +38,9 @@ const upload = multer({
     checkFileType(file, cb);
   },
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit for book documents (aligned with Cloudinary free tier)
+    fileSize: 50 * 1024 * 1024, // 50MB limit for book documents
+    fieldSize: 50 * 1024 * 1024, // 50MB for form fields
+    files: 2, // Max 2 files (file + coverImage)
   },
 });
 

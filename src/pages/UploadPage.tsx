@@ -41,8 +41,8 @@ export const UploadPage: React.FC = () => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      if (selectedFile.size > 10 * 1024 * 1024) {
-        setError('File is too large. Maximum size is 10MB due to plan limits.');
+      if (selectedFile.size > 50 * 1024 * 1024) {
+        setError('File is too large. Maximum size is 50MB.');
         setFile(null);
         setPreviewUrl(null);
         return;
@@ -306,7 +306,7 @@ export const UploadPage: React.FC = () => {
                           <UploadIcon className={isDragging ? 'text-void' : 'text-muted-gray group-hover:text-soft-white'} size={24} />
                         </div>
                         <p className="text-soft-white font-light tracking-wide mb-2 text-lg">Transmit your document</p>
-                        <p className="text-muted-gray text-[10px] tracking-widest uppercase opacity-40">PDF (MAX 10MB)</p>
+                        <p className="text-muted-gray text-[10px] tracking-widest uppercase opacity-40">PDF (MAX 50MB)</p>
                       </div>
                     </div>
                   ) : (

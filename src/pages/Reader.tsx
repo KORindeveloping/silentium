@@ -9,7 +9,7 @@ import 'react-pdf/dist/Page/TextLayer.css';
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../contexts/AuthContext';
 
-// Configure PDF.js worker
+// Configure PDF.js worker with proper CORS and error handling
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 export const Reader: React.FC = () => {
@@ -28,12 +28,12 @@ export const Reader: React.FC = () => {
   const isLocked = !user || (user.credits <= 0 && user.role !== 'admin' && user._id !== doc?.author?._id);
   const showBlur = isLocked && currentPage >= PREVIEW_LIMIT;
 
-  useEffect(() => {
-    const { user, token, login } = useAuth();
+  const { user: authUser, token } = useAuth();
 
+  useEffect(() => {
     // Set user from auth context if available
-    if (user && token) {
-      setUser(user);
+    if (authUser && token) {
+      setUser(authUser);
     }
 
     fetch(`${API_BASE_URL}/api/books/${id}`)
@@ -64,11 +64,21 @@ export const Reader: React.FC = () => {
   function onDocumentLoadError(error: Error) {
     console.error('PDF Load Error:', error);
     let friendlyMessage = error.message;
-    if (error.message.includes('structure')) {
+    
+    if (error.message.includes('structure') || error.message.includes('Invalid PDF')) {
       friendlyMessage = 'The file is not a valid PDF or is corrupted. Please ensure you uploaded a proper .pdf file.';
-    } else if (error.message.includes('fetch')) {
-      friendlyMessage = 'Network error while fetching the PDF. Check your connection or Cloudinary settings.';
+    } else if (error.message.includes('fetch') || error.message.includes('401') || error.message.includes('403')) {
+      friendlyMessage = 'Authentication error accessing PDF. The file may not be publicly accessible. Please try refreshing or contact support.';
+    } else if (error.message.includes('404')) {
+      friendlyMessage = 'PDF file not found. It may have been moved or deleted.';
+    } else if (error.message.includes('network') || error.message.includes('NetworkError')) {
+      friendlyMessage = 'Network error while fetching PDF. Check your internet connection and try again.';
+    } else if (error.message.includes('CORS')) {
+      friendlyMessage = 'CORS error accessing PDF. The file server may not allow cross-origin requests.';
+    } else {
+      friendlyMessage = `Failed to load PDF: ${error.message}`;
     }
+    
     setError(friendlyMessage);
   }
 
