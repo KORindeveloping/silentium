@@ -6,6 +6,7 @@ import Book from '../models/Book';
 import User from '../models/User';
 import { uploadToCloudinary } from '../utils/cloudinaryHelper';
 import { isCloudinaryConfigured } from '../config/cloudinary';
+import fetch from 'node-fetch';
 
 const uploadsDirRoot = () => process.env.UPLOADS_PATH || path.join(process.cwd(), 'uploads');
 
@@ -56,7 +57,8 @@ export const createBook = async (req: Request, res: Response) => {
 
       try {
         // Always upload to Cloudinary for permanent storage
-        const result = await uploadToCloudinary(file.path, 'books/files');
+        // Use 'raw' to avoid 401 errors with some Cloudinary PDF settings
+        const result = await uploadToCloudinary(file.path, 'books/files', 'raw');
         fileUrl = result.secure_url;
         console.log(`File (${fileSizeMB.toFixed(1)}MB) uploaded to Cloudinary: ${result.secure_url}`);
 
@@ -156,15 +158,67 @@ export const streamBookFile = async (req: Request, res: Response) => {
     return;
   }
 
-  const book = await Book.findById(req.params.id).lean<{ fileUrl?: string }>();
+  const book = await Book.findById(req.params.id).lean<{ fileUrl?: string, title?: string }>();
   const fileUrl = book?.fileUrl;
   if (!book || !fileUrl) {
     res.status(404).json({ message: 'Book has no downloadable file' });
     return;
   }
 
-  // Redirect to Cloudinary URL directly for permanent cloud storage
-  res.redirect(302, fileUrl);
+  const isCloudinary = fileUrl.includes('res.cloudinary.com');
+  const relativePath = extractUploadsRelative(fileUrl);
+
+  // Set headers to allow PDF display and handle CORS
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  
+  // Optional: Set filename for downloads
+  const fileName = (book.title || 'document').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  res.setHeader('Content-Disposition', `inline; filename="${fileName}.pdf"`);
+
+  if (isCloudinary) {
+    try {
+      console.log(`Proxying Cloudinary file: ${fileUrl}`);
+      const response = await fetch(fileUrl);
+      if (!response.ok) {
+        console.error(`Cloudinary fetch failed: ${response.status} ${response.statusText}`);
+        return res.status(response.status).json({ message: 'Failed to fetch file from cloud storage' });
+      }
+      
+      if (response.body) {
+        // node-fetch 3.x body is a standard ReadableStream in ESM, 
+        // but it often provides a pipe method for compatibility or we can wrap it.
+        // In Node 18+, we can also use stream.Readable.fromWeb(response.body as any).pipe(res);
+        (response.body as any).pipe(res);
+      } else {
+        res.status(500).json({ message: 'Cloud storage response has no body' });
+      }
+    } catch (error: any) {
+      console.error('Proxy Error (Cloudinary):', error);
+      if (!res.headersSent) {
+        res.status(500).json({ message: 'Error streaming from cloud storage' });
+      }
+    }
+  } else if (relativePath) {
+    const localPath = path.join(uploadsDirRoot(), relativePath);
+    console.log(`Streaming local file: ${localPath}`);
+    if (fs.existsSync(localPath)) {
+      const stream = fs.createReadStream(localPath);
+      stream.on('error', (err) => {
+        console.error('Local Stream Error:', err);
+        if (!res.headersSent) res.status(500).send('Error reading local file');
+      });
+      stream.pipe(res);
+    } else {
+      console.warn(`Local file not found: ${localPath}`);
+      res.status(404).json({ message: 'Local file not found' });
+    }
+  } else {
+    // Fallback: Redirect if we can't handle it
+    console.log(`Fallback redirect to: ${fileUrl}`);
+    res.redirect(302, fileUrl);
+  }
 };
 
 // @desc    Get all books

@@ -117,7 +117,37 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
     if (await user.matchPassword(password)) {
       user.loginAttempts = 0;
       user.lockUntil = undefined;
-      user.lastLogin = new Date();
+      
+      // --- Robust Streak Logic ---
+      const now = new Date();
+      const lastLogin = user.lastLogin;
+      
+      if (lastLogin) {
+        const lastLoginDate = new Date(lastLogin);
+        const isToday = now.toDateString() === lastLoginDate.toDateString();
+        
+        if (!isToday) {
+          const yesterday = new Date(now);
+          yesterday.setDate(now.getDate() - 1);
+          const isYesterday = yesterday.toDateString() === lastLoginDate.toDateString();
+
+          if (isYesterday) {
+            user.streak += 1;
+          } else {
+            // Gap of more than 1 day
+            if (user.streak > 1) {
+              user.lastLostStreak = user.streak;
+            }
+            user.streak = 1;
+          }
+          
+          if (user.streak > user.longestStreak) {
+            user.longestStreak = user.streak;
+          }
+        }
+      }
+      
+      user.lastLogin = now;
       await user.save();
 
       await LoginLog.create({ userId: user._id as any, email, status: 'success', ipAddress, userAgent });
@@ -126,6 +156,9 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
         _id: user._id,
         email: user.email,
         role: user.role,
+        streak: user.streak,
+        longestStreak: user.longestStreak,
+        lastLostStreak: user.lastLostStreak,
         token: generateToken((user._id as any).toString(), rememberMe),
       });
     } else {
@@ -178,6 +211,9 @@ export const getUserProfile = async (req: Request, res: Response, next: NextFunc
         location: user.location,
         avatar: getFullUrl(req, user.avatar),
         notificationPreferences: user.notificationPreferences,
+        streak: user.streak,
+        longestStreak: user.longestStreak,
+        lastLostStreak: user.lastLostStreak,
         createdAt: user.createdAt,
       });
     } else {

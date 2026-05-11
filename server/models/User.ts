@@ -24,6 +24,9 @@ export interface IUser extends Document {
   loginAttempts: number;
   lockUntil?: Date;
   credits: number;
+  streak: number;
+  longestStreak: number;
+  lastLostStreak: number;
   matchPassword(enteredPassword: string): Promise<boolean>;
 }
 
@@ -45,6 +48,18 @@ const UserSchema: Schema = new Schema({
     default: 'reader',
   },
   credits: {
+    type: Number,
+    default: 0,
+  },
+  streak: {
+    type: Number,
+    default: 1,
+  },
+  longestStreak: {
+    type: Number,
+    default: 0,
+  },
+  lastLostStreak: {
     type: Number,
     default: 0,
   },

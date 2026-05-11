@@ -35,6 +35,9 @@ interface UserProfile {
     push: boolean;
     activity: boolean;
   };
+  streak: number;
+  longestStreak: number;
+  lastLostStreak: number;
   createdAt: string;
 }
 
@@ -245,12 +248,15 @@ export const Profile = () => {
 
         <div className="md:ml-auto flex gap-4">
           <div className="glass p-6 rounded-[2rem] text-center min-w-[120px]">
-            <div className="text-2xl font-light mb-1">12</div>
-            <div className="text-[8px] uppercase tracking-widest text-muted-gray">Collections</div>
+            <div className="text-2xl font-light mb-1 flex items-center justify-center gap-2">
+              <Flame size={20} className="text-orange-500 fill-orange-500" />
+              {user?.streak || 0}
+            </div>
+            <div className="text-[8px] uppercase tracking-widest text-muted-gray">Current Streak</div>
           </div>
           <div className="glass p-6 rounded-[2rem] text-center min-w-[120px]">
-            <div className="text-2xl font-light mb-1">4.8k</div>
-            <div className="text-[8px] uppercase tracking-widest text-muted-gray">Points</div>
+            <div className="text-2xl font-light mb-1">{user?.longestStreak || 0}</div>
+            <div className="text-[8px] uppercase tracking-widest text-muted-gray">Best Streak</div>
           </div>
         </div>
       </div>

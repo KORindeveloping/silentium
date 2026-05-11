@@ -48,6 +48,9 @@ export interface User {
   name?: string;
   avatar?: string;
   credits: number;
+  streak?: number;
+  longestStreak?: number;
+  lastLostStreak?: number;
   isPremium?: boolean; // Derived from subscription status ideally
 }
 

@@ -124,7 +124,7 @@ export const Reader: React.FC = () => {
             <div className="flex flex-col items-center py-8 min-h-[600px] relative">
               {doc.fileUrl?.toLowerCase().endsWith('.pdf') ? (
                 <Document
-                  file={doc.fileUrl}
+                  file={`${API_BASE_URL}/api/books/${id}/file`}
                   onLoadSuccess={onDocumentLoadSuccess}
                   onLoadError={onDocumentLoadError}
                   loading={<div className="text-muted-gray animate-pulse p-20 uppercase tracking-[0.5em] text-[10px]">Initializing Reader...</div>}
@@ -160,7 +160,7 @@ export const Reader: React.FC = () => {
                     The inline reader currently only supports PDF files. This document is a different format.
                   </p>
                   <a 
-                    href={doc.fileUrl} 
+                    href={`${API_BASE_URL}/api/books/${id}/file`} 
                     download
                     className="px-8 py-4 bg-soft-white text-void rounded-full text-[10px] uppercase tracking-[0.3em] font-black hover:bg-white transition-all inline-block"
                   >

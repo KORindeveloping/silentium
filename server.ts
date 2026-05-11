@@ -138,40 +138,23 @@ app.get('/test-upload', (req, res) => {
   }
 });
 
-// 3. Static Files (Cloudinary used for books, local disk for avatars)
+// 3. Static Files (Cloudinary used for books, local disk for avatars/legacy)
 const uploadsDir = process.env.UPLOADS_PATH || path.join(process.cwd(), 'uploads');
 console.log('Uploads directory:', uploadsDir);
-console.log('Current working directory:', process.cwd());
-console.log('Environment UPLOADS_PATH:', process.env.UPLOADS_PATH);
 
-// Ensure uploads directory exists with proper permissions
-try {
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-    console.log('Created uploads directory:', uploadsDir);
-  } else {
-    console.log('Uploads directory exists');
-  }
-  
-  // Test directory access
-  const testFile = path.join(uploadsDir, 'test-access.txt');
-  fs.writeFileSync(testFile, 'test');
-  fs.unlinkSync(testFile);
-  console.log('Uploads directory is writable');
-  
-  // List files if any exist
-  try {
-    const files = fs.readdirSync(uploadsDir);
-    console.log('Files in uploads:', files.length > 0 ? files : '(empty)');
-  } catch (err) {
-    console.log('Cannot read uploads directory:', err.message);
-  }
-} catch (error) {
-  console.error('Error setting up uploads directory:', error);
+// Ensure uploads directory exists
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Note: All files are now stored in Cloudinary for permanent storage
-// Local uploads route removed to prevent data loss on redeploys
+// Serve static files from uploads directory with CORS headers
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  next();
+}, express.static(uploadsDir));
+
+// Note: New uploads are stored in Cloudinary, but local support is kept for legacy files and avatars
 
 // 4. API Routes
 app.use('/api/auth', authRoutes);
