@@ -7,17 +7,15 @@ export const uploadToCloudinary = (filePath: string, folder: string, resourceTyp
       { 
         folder, 
         resource_type: resourceType,
-        type: 'upload', // Ensure it's a standard upload
-        access_mode: 'public', // Explicitly set to public
-        use_filename: true, // Preserve original filename
-        unique_filename: false, // Don't generate random filename
-        overwrite: true, // Overwrite existing files
-        secure: true, // Force HTTPS URLs
-        allowed_formats: ['pdf', 'doc', 'docx', 'epub', 'jpg', 'jpeg', 'png', 'webp'] // Explicit allowed formats
+        type: 'upload', 
+        access_mode: 'public',
+        use_filename: true,
+        unique_filename: true,
+        overwrite: true
       },
       (error, result) => {
         if (result) {
-          console.log(`Cloudinary upload success: ${result.secure_url} (resource_type: ${resourceType})`);
+          console.log(`[Cloudinary] Upload success: ${result.secure_url} (${result.resource_type})`);
           resolve(result);
         } else {
           console.error('Cloudinary upload error:', error);

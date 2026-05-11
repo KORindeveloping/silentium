@@ -180,13 +180,9 @@ export const streamBookFile = async (req: Request, res: Response) => {
     const isCloudinary = fileUrl.includes('cloudinary');
     const relativePath = extractUploadsRelative(fileUrl);
 
-    // Set headers to allow PDF display and handle CORS
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // Deferred header setting (Content-Type set inside handlers based on result)
     res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization');
-    res.setHeader('Accept-Ranges', 'bytes');
     
     const fileName = (book.title || 'document').replace(/[^a-z0-9]/gi, '_').toLowerCase();
     res.setHeader('Content-Disposition', `inline; filename="${fileName}.pdf"`);
@@ -206,15 +202,18 @@ export const streamBookFile = async (req: Request, res: Response) => {
         // Attempt 2: If 401, try to generate a signed URL (in case it's a private asset)
         if (response.status === 401 && isCloudinaryConfigured()) {
           console.log(`[Proxy] 401 Unauthorized from Cloudinary. Attempting signed URL fallback...`);
-          // URL format: https://res.cloudinary.com/<cloud>/raw/upload/v<version>/<folder>/<id>.<ext>
+          
+          // Extract public_id from URL
           const parts = fileUrl.split('/');
           const uploadIdx = parts.indexOf('upload');
           if (uploadIdx !== -1 && uploadIdx + 2 < parts.length) {
+             // For 'raw' assets, the public_id usually includes the extension if uploaded that way
              const publicIdWithExt = parts.slice(uploadIdx + 2).join('/');
-             const publicId = publicIdWithExt.split('.')[0];
+             
+             console.log(`[Proxy] Extracted public ID for signing: ${publicIdWithExt}`);
              
              const { v2: cloudinary } = await import('cloudinary');
-             const signedUrl = cloudinary.url(publicId, {
+             const signedUrl = cloudinary.url(publicIdWithExt, {
                resource_type: 'raw',
                secure: true,
                sign_url: true
@@ -227,6 +226,7 @@ export const streamBookFile = async (req: Request, res: Response) => {
 
         if (!response.ok) {
           console.error(`[Proxy] Cloudinary fetch failed after all attempts: ${response.status} ${response.statusText}`);
+          // Do not set PDF header if we are returning JSON error
           return res.status(response.status).json({ 
             message: 'Failed to fetch file from cloud storage',
             cloudinaryStatus: response.status,
@@ -236,6 +236,11 @@ export const streamBookFile = async (req: Request, res: Response) => {
         
         if (response.body) {
           console.log(`[Proxy] Successfully established stream for ${book.title}`);
+          // Set headers ONLY on success to avoid crashing PDF.js with JSON errors
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Accept-Ranges', 'bytes');
           (response.body as any).pipe(res);
         } else {
           res.status(500).json({ message: 'Cloud storage response has no body' });
