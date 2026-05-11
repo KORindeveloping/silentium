@@ -164,6 +164,7 @@ export const UploadPage: React.FC = () => {
     if (token) {
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     }
+    // Remove xhr.setRequestHeader('Content-Type', 'multipart/form-data'); - XHR handles this automatically with boundary
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
@@ -177,8 +178,7 @@ export const UploadPage: React.FC = () => {
       try {
         data = JSON.parse(xhr.responseText);
       } catch (e) {
-        const errorSnippet = xhr.responseText.substring(0, 100).replace(/<[^>]*>/g, '').trim();
-        setError(`Server Response Error [${xhr.status}]: ${errorSnippet || 'Check MONGO_URI in environment settings.'}`);
+        setError(`Server error (Status ${xhr.status}): Could not parse response.`);
         setIsUploading(false);
         return;
       }
@@ -186,13 +186,13 @@ export const UploadPage: React.FC = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         navigate('/publish-success', { state: { bookId: data._id, title: data.title } });
       } else {
-        setError(data.message || 'Upload failed');
+        setError(data.message || 'Upload failed. Please check your inputs and file size.');
         setIsUploading(false);
       }
     };
 
     xhr.onerror = () => {
-      setError('Network error occurred.');
+      setError('Network error occurred during upload.');
       setIsUploading(false);
     };
 

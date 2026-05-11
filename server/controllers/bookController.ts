@@ -61,18 +61,29 @@ export const createBook = async (req: Request, res: Response) => {
         console.log(`File (${fileSizeMB.toFixed(1)}MB) uploaded to Cloudinary: ${result.secure_url}`);
         
         // Clean up temporary file
-        const fs = await import('fs');
-        fs.unlinkSync(file.path);
+        if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+        }
       } catch (error) {
         console.error('Cloudinary upload failed:', error);
-        throw new Error('Failed to upload file to cloud storage. Please try again.');
+        throw new Error(`Cloudinary upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
 
     // Upload Cover Image
     if (files?.['coverImage']?.[0]) {
-      const result = await uploadToCloudinary(files['coverImage'][0].path, 'books/covers');
-      coverImageUrl = result.secure_url;
+      try {
+        const result = await uploadToCloudinary(files['coverImage'][0].path, 'books/covers');
+        coverImageUrl = result.secure_url;
+        
+        // Clean up temp file
+        if (fs.existsSync(files['coverImage'][0].path)) {
+            fs.unlinkSync(files['coverImage'][0].path);
+        }
+      } catch (error) {
+          console.error('Cloudinary cover image upload failed:', error);
+          throw new Error(`Cloudinary cover image upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
     }
 
     const book = new Book({
@@ -100,6 +111,7 @@ export const createBook = async (req: Request, res: Response) => {
 
     res.status(201).json(createdBook);
   } catch (error: any) {
+    console.error('Upload error details:', error);
     const msg = typeof error?.message === 'string' ? error.message : 'Upload failed';
     
     // Handle file size limit errors (now 50MB)
@@ -117,7 +129,21 @@ export const createBook = async (req: Request, res: Response) => {
         code: 'CLOUDINARY_MISSING_API_KEY'
       });
     }
-    res.status(400).json({ message: msg });
+    
+    // Handle specific Cloudinary errors
+    if (error?.name === 'Error' && error?.http_code) {
+      return res.status(error.http_code).json({
+        message: `Cloudinary error: ${msg}`,
+        code: 'CLOUDINARY_ERROR',
+        details: error
+      });
+    }
+    
+    res.status(400).json({ 
+      message: msg,
+      code: 'UPLOAD_ERROR',
+      details: error
+    });
   }
 };
 
