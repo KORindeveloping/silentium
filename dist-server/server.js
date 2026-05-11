@@ -1,5 +1,5 @@
 // server.ts
-import dotenv from "dotenv";
+import dotenv2 from "dotenv";
 import express9 from "express";
 import { createServer as createViteServer } from "vite";
 import path3 from "path";
@@ -33,15 +33,19 @@ var connectDB = async () => {
         await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 8e3 });
         console.log(`MongoDB Connected (Cloud)`);
       } catch (err) {
-        if (process.env.VERCEL || process.env.NODE_ENV === "production") {
-          throw new Error(`DATABASE_CONNECTION_FAILED: Could not connect to your cloud MongoDB Atlas. Please check your MONGO_URI and Network Access (whitelist 0.0.0.0/0) in Atlas. Details: ${err.message}`);
-        }
-        console.error("Cloud MongoDB connection failed. Falling back to In-Memory MongoDB...", err.message);
+        const errorMessage = err.message;
+        console.error(`Cloud MongoDB connection failed. Error details:`, {
+          error: errorMessage,
+          mongoUri: mongoUri ? "configured" : "missing",
+          environment: process.env.NODE_ENV || "unknown",
+          timestamp: (/* @__PURE__ */ new Date()).toISOString()
+        });
+        console.log("Falling back to In-Memory MongoDB for production stability...");
         const { MongoMemoryServer } = await import("mongodb-memory-server");
         const mongoServer = await MongoMemoryServer.create();
-        mongoUri = mongoServer.getUri();
-        await mongoose.connect(mongoUri);
-        console.log(`Virtual MongoDB Connected (In-Memory)`);
+        const fallbackUri = mongoServer.getUri();
+        await mongoose.connect(fallbackUri);
+        console.log(`Fallback MongoDB Connected (In-Memory)`);
       }
     }
   } catch (error) {
@@ -406,11 +410,23 @@ var protect = async (req, res, next) => {
   if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
     try {
       token = req.headers.authorization.split(" ")[1];
+      if (!token) {
+        return res.status(401).json({ message: "Not authorized, token missing" });
+      }
       const decoded = jwt2.verify(token, process.env.JWT_SECRET || "secret");
       req.user = await User_default.findById(decoded.id).select("-passwordHash");
+      if (!req.user) {
+        return res.status(401).json({ message: "Not authorized, user not found" });
+      }
       return next();
     } catch (error) {
-      console.error(error);
+      console.error("JWT Error:", error.message);
+      if (error.name === "JsonWebTokenError") {
+        return res.status(401).json({ message: "Not authorized, invalid token" });
+      }
+      if (error.name === "TokenExpiredError") {
+        return res.status(401).json({ message: "Not authorized, token expired" });
+      }
       return res.status(401).json({ message: "Not authorized, token failed" });
     }
   }
@@ -469,7 +485,7 @@ var upload = multer({
   },
   limits: {
     fileSize: 50 * 1024 * 1024
-    // 50MB limit
+    // 50MB limit for book documents
   }
 });
 var uploadMiddleware_default = upload;
@@ -583,6 +599,19 @@ var uploadToCloudinary = (filePath, folder) => {
   });
 };
 
+// server/config/cloudinary.ts
+import { v2 as cloudinary2 } from "cloudinary";
+import dotenv from "dotenv";
+dotenv.config();
+cloudinary2.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+var isCloudinaryConfigured = () => Boolean(
+  process.env.CLOUDINARY_CLOUD_NAME?.trim() && process.env.CLOUDINARY_API_KEY?.trim() && process.env.CLOUDINARY_API_SECRET?.trim()
+);
+
 // server/controllers/bookController.ts
 var createBook = async (req, res) => {
   try {
@@ -591,11 +620,28 @@ var createBook = async (req, res) => {
     if (!files?.["file"] && !content) {
       return res.status(400).json({ message: "Please provide either a file or write content." });
     }
+    const needsCloudinaryUpload = !!(files?.["file"]?.[0] || files?.["coverImage"]?.[0]);
+    if (needsCloudinaryUpload && !isCloudinaryConfigured()) {
+      return res.status(503).json({
+        message: "Cloudinary is not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in the server environment (e.g. Render dashboard).",
+        code: "CLOUDINARY_NOT_CONFIGURED"
+      });
+    }
     let fileUrl;
     let coverImageUrl;
     if (files?.["file"]?.[0]) {
-      const result = await uploadToCloudinary(files["file"][0].path, "books/files");
-      fileUrl = result.secure_url;
+      const file = files["file"][0];
+      const fileSizeMB = file.size / (1024 * 1024);
+      try {
+        const result = await uploadToCloudinary(file.path, "books/files");
+        fileUrl = result.secure_url;
+        console.log(`File (${fileSizeMB.toFixed(1)}MB) uploaded to Cloudinary: ${result.secure_url}`);
+        const fs3 = await import("fs");
+        fs3.unlinkSync(file.path);
+      } catch (error) {
+        console.error("Cloudinary upload failed:", error);
+        throw new Error("Failed to upload file to cloud storage. Please try again.");
+      }
     }
     if (files?.["coverImage"]?.[0]) {
       const result = await uploadToCloudinary(files["coverImage"][0].path, "books/covers");
@@ -623,8 +669,34 @@ var createBook = async (req, res) => {
     }
     res.status(201).json(createdBook);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    const msg = typeof error?.message === "string" ? error.message : "Upload failed";
+    if (msg.includes("File size too large") || msg.includes("file size") || msg.includes("LIMIT_FILE_SIZE")) {
+      return res.status(413).json({
+        message: "File size too large. Maximum file size is 50MB for book documents.",
+        code: "FILE_TOO_LARGE"
+      });
+    }
+    if (/must supply api_key/i.test(msg)) {
+      return res.status(503).json({
+        message: "Cloudinary rejected the upload (missing credentials). Confirm CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET are set correctly on Render.",
+        code: "CLOUDINARY_MISSING_API_KEY"
+      });
+    }
+    res.status(400).json({ message: msg });
   }
+};
+var streamBookFile = async (req, res) => {
+  if (!/^[a-fA-F0-9]{24}$/.test(req.params.id)) {
+    res.status(400).json({ message: "Invalid book id" });
+    return;
+  }
+  const book = await Book_default.findById(req.params.id).lean();
+  const fileUrl = book?.fileUrl;
+  if (!book || !fileUrl) {
+    res.status(404).json({ message: "Book has no downloadable file" });
+    return;
+  }
+  res.redirect(302, fileUrl);
 };
 var getBooks = async (req, res) => {
   const pageSize = Number(req.query.limit) || 12;
@@ -791,6 +863,7 @@ var asyncHandler = (fn) => (req, res, next) => {
 
 // server/routes/bookRoutes.ts
 var router2 = express2.Router();
+router2.get("/:id/file", asyncHandler(streamBookFile));
 router2.route("/").get(asyncHandler(getBooks)).post(protect, author, uploadMiddleware_default.fields([{ name: "file", maxCount: 1 }, { name: "coverImage", maxCount: 1 }]), asyncHandler(createBook));
 router2.route("/:id").get(asyncHandler(getBookById)).put(protect, author, asyncHandler(updateBook)).delete(protect, author, asyncHandler(deleteBook));
 router2.route("/:id/like").put(protect, asyncHandler(toggleLike));
@@ -1381,11 +1454,23 @@ var commentRoutes_default = router8;
 var isDev = process.env.NODE_ENV !== "production";
 var errorHandler = (err, req, res, next) => {
   try {
-    const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
-    res.status(statusCode);
-    console.error(`[Server Error] ${req.method} ${req.url}:`, err);
+    const statusCode = err?.statusCode || err?.status || (res.statusCode === 200 ? 500 : res.statusCode);
+    res.status(statusCode).header("Content-Type", "application/json");
+    const errorContext = {
+      method: req.method,
+      url: req.url,
+      userAgent: req.get("User-Agent"),
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      renderService: process.env.RENDER_SERVICE_ID || "unknown"
+    };
+    console.error(`[Server Error] ${req.method} ${req.url}:`, {
+      ...errorContext,
+      error: err.message,
+      stack: err.stack
+    });
     if (err.name === "ValidationError") {
-      return res.json({
+      return res.status(400).json({
+        success: false,
         message: "Validation failed",
         errors: Object.values(err.errors || {}).map((e) => e.message)
       });
@@ -1393,25 +1478,80 @@ var errorHandler = (err, req, res, next) => {
     if (err.code === 11e3) {
       const field = err.keyValue ? Object.keys(err.keyValue)[0] : "resource";
       return res.status(400).json({
-        message: `${field} already exists (duplicate key error)`,
-        field
+        success: false,
+        message: `${field} already exists`,
+        field,
+        code: "DUPLICATE_KEY"
       });
     }
-    res.json({
+    if (err.name === "CastError") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid ID format",
+        field: err.path,
+        value: err.value,
+        code: "INVALID_ID"
+      });
+    }
+    if (err.name === "JsonWebTokenError") {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid authentication token",
+        code: "INVALID_TOKEN"
+      });
+    }
+    if (err.name === "TokenExpiredError") {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication token expired",
+        code: "TOKEN_EXPIRED"
+      });
+    }
+    if (err.name === "MongooseServerSelectionError") {
+      return res.status(503).json({
+        success: false,
+        message: "Database connection failed",
+        code: "DATABASE_ERROR"
+      });
+    }
+    if (err.code === "ENOENT" || err.code === "ENAMETOOLONG") {
+      return res.status(404).json({
+        success: false,
+        message: "File not found",
+        code: "FILE_NOT_FOUND"
+      });
+    }
+    if (err.message?.includes("Cloudinary")) {
+      return res.status(500).json({
+        success: false,
+        message: "File upload service error",
+        code: "UPLOAD_ERROR"
+      });
+    }
+    const response = {
+      success: false,
       message: err.message || "Internal Server Error",
-      error: isDev ? err : void 0,
-      stack: isDev ? err.stack : void 0
-    });
+      code: "INTERNAL_ERROR"
+    };
+    if (isDev) {
+      response.error = err;
+      response.stack = err.stack;
+    }
+    res.json(response);
   } catch (fatalError) {
     console.error("Fatal Error in Error Handler:", fatalError);
     if (!res.headersSent) {
-      res.status(500).json({ message: "Internal Server Error" });
+      res.status(500).header("Content-Type", "application/json").json({
+        success: false,
+        message: "Internal Server Error",
+        code: "FATAL_ERROR"
+      });
     }
   }
 };
 
 // server.ts
-dotenv.config();
+dotenv2.config();
 var __filename = fileURLToPath(import.meta.url);
 var __dirname = path3.dirname(__filename);
 var app = express9();
@@ -1449,6 +1589,7 @@ if (isDev2) {
         "img-src": ["'self'", "data:", "blob:", "https://*"],
         "frame-src": ["'self'", "blob:", "*"],
         // Allow framing from anywhere if needed
+        "frame-ancestors": ["'self'", "https://*.vercel.app", "https://silentium-m9z8.onrender.com", "http://localhost:3000"],
         "object-src": ["'self'", "blob:"],
         "connect-src": ["'self'", "blob:", "https://unpkg.com", "*"]
       }
@@ -1467,14 +1608,77 @@ app.use(cors({
 }));
 app.use(express9.json());
 app.use(asyncHandler(async (req, res, next) => {
-  await ensureConnection();
+  try {
+    await ensureConnection();
+  } catch (error) {
+    console.error("Database connection failed:", error.message);
+    return res.status(500).json({
+      message: "Database connection failed",
+      error: process.env.NODE_ENV !== "production" ? error.message : void 0
+    });
+  }
   next();
 }));
+app.get("/", (req, res) => {
+  const healthStatus = {
+    success: true,
+    status: "ok",
+    message: "Silentium API is running",
+    timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+    environment: process.env.NODE_ENV,
+    uptime: process.uptime(),
+    version: process.env.npm_package_version || "unknown",
+    render: {
+      serviceId: process.env.RENDER_SERVICE_ID || "not-on-render",
+      instanceId: process.env.RENDER_INSTANCE_ID || "not-on-render",
+      externalUrl: process.env.RENDER_EXTERNAL_URL || "not-on-render"
+    },
+    database: {
+      connected: isConnected,
+      uri: process.env.MONGO_URI ? "configured" : "not-configured"
+    }
+  };
+  res.header("Content-Type", "application/json").json(healthStatus);
+});
+app.get("/test-upload", (req, res) => {
+  try {
+    const testFile = path3.join(uploadsDir2, "test-sample.pdf");
+    const testContent = "Sample PDF content for testing\nCreated: " + (/* @__PURE__ */ new Date()).toISOString();
+    fs2.writeFileSync(testFile, testContent);
+    res.json({
+      message: "Test file created",
+      file: "test-sample.pdf",
+      url: `${req.protocol}://${req.get("host")}/uploads/test-sample.pdf`,
+      uploadsDir: uploadsDir2
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 var uploadsDir2 = process.env.UPLOADS_PATH || path3.join(process.cwd(), "uploads");
-if (!fs2.existsSync(uploadsDir2)) {
-  fs2.mkdirSync(uploadsDir2, { recursive: true });
+console.log("Uploads directory:", uploadsDir2);
+console.log("Current working directory:", process.cwd());
+console.log("Environment UPLOADS_PATH:", process.env.UPLOADS_PATH);
+try {
+  if (!fs2.existsSync(uploadsDir2)) {
+    fs2.mkdirSync(uploadsDir2, { recursive: true });
+    console.log("Created uploads directory:", uploadsDir2);
+  } else {
+    console.log("Uploads directory exists");
+  }
+  const testFile = path3.join(uploadsDir2, "test-access.txt");
+  fs2.writeFileSync(testFile, "test");
+  fs2.unlinkSync(testFile);
+  console.log("Uploads directory is writable");
+  try {
+    const files = fs2.readdirSync(uploadsDir2);
+    console.log("Files in uploads:", files.length > 0 ? files : "(empty)");
+  } catch (err) {
+    console.log("Cannot read uploads directory:", err.message);
+  }
+} catch (error) {
+  console.error("Error setting up uploads directory:", error);
 }
-app.use("/uploads", express9.static(uploadsDir2));
 app.use("/api/auth", authRoutes_default);
 app.use("/api/books", bookRoutes_default);
 app.use("/api/analytics", analyticsRoutes_default);
@@ -1486,6 +1690,15 @@ app.use("/api/comments", commentRoutes_default);
 app.use("/api/user", authRoutes_default);
 app.use("/api/documents", bookRoutes_default);
 var setupFrontend = async () => {
+  console.log("=== Silentium Server Startup ===");
+  console.log("Environment:", process.env.NODE_ENV);
+  console.log("Platform:", process.platform);
+  console.log("Node Version:", process.version);
+  console.log("Working Directory:", process.cwd());
+  console.log("Render Service:", process.env.RENDER_SERVICE_ID || "Not running on Render");
+  console.log("Mongo URI configured:", !!process.env.MONGO_URI);
+  console.log("JWT Secret configured:", !!process.env.JWT_SECRET);
+  console.log("================================");
   if (isDev2 && !process.env.VERCEL) {
     try {
       const vite = await createViteServer({
@@ -1493,6 +1706,7 @@ var setupFrontend = async () => {
         appType: "spa"
       });
       app.use(vite.middlewares);
+      console.log("Vite development server configured");
     } catch (err) {
       console.error("Vite Server Error:", err);
     }
@@ -1504,19 +1718,34 @@ var setupFrontend = async () => {
         if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) return next();
         res.sendFile(path3.join(distPath, "index.html"));
       });
+      console.log("Static files serving from:", distPath);
     } else {
+      console.warn("Dist directory not found:", distPath);
       app.get("*", (req, res, next) => {
         if (req.path.startsWith("/api")) return next();
-        res.status(404).json({ message: "The application is still initializing. Please wait a moment." });
+        res.status(404).json({
+          success: false,
+          message: "The application is still initializing. Please wait a moment.",
+          code: "APP_NOT_READY"
+        });
       });
     }
   }
   app.use(errorHandler);
   if (!process.env.VERCEL) {
     const PORT = Number(process.env.PORT) || 3e3;
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Professional server running at http://localhost:${PORT}`);
+    const HOST = process.env.RENDER ? "0.0.0.0" : "localhost";
+    app.listen(PORT, HOST, () => {
+      console.log(`=== Server Started Successfully ===`);
+      console.log(`URL: http://${HOST}:${PORT}`);
       console.log(`Mode: ${isDev2 ? "Development" : "Production"}`);
+      console.log(`Health check available at: http://${HOST}:${PORT}/`);
+      console.log(`================================`);
+    }).on("error", (err) => {
+      console.error("Failed to start server:", err);
+      if (err.code === "EADDRINUSE") {
+        console.error(`Port ${PORT} is already in use`);
+      }
     });
   }
 };

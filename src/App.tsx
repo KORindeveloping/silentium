@@ -46,33 +46,32 @@ export default function App() {
       <Router>
         <div className="min-h-screen bg-void selection:bg-white/20">
           <Navbar />
-            <AnimatePresence mode="wait">
-              <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/reader/:id" element={<Reader />} />
-                <Route path="/upload" element={<ProtectedRoute><Upload /></ProtectedRoute>} />
-                <Route path="/publish-success" element={<ProtectedRoute><PublishSuccess /></ProtectedRoute>} />
-                <Route path="/dashboard" element={<ProtectedRoute><AuthorDashboard /></ProtectedRoute>} />
-                <Route path="/admin" element={<ProtectedRoute><AdminPanel /></ProtectedRoute>} />
-                <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-                <Route path="/library" element={<Library />} />
-              </Routes>
-            </AnimatePresence>
-            
-            {/* Subtle footer */}
-            <footer className="px-12 py-12 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6">
-              <div className="text-[10px] uppercase tracking-[0.4em] text-muted-gray/40">
-                © 2026 Silentium. Knowledge in silence.
-              </div>
-              <div className="flex gap-8 text-[10px] uppercase tracking-[0.2em] text-muted-gray/40">
-                <a href="#" className="hover:text-muted-gray transition-colors">Privacy</a>
-                <a href="#" className="hover:text-muted-gray transition-colors">Terms</a>
-                <a href="#" className="hover:text-muted-gray transition-colors">Contact</a>
-              </div>
-            </footer>
+          <AnimatePresence mode="wait">
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/reader/:id" element={<Reader />} />
+              <Route path="/upload" element={<ProtectedRoute><Upload /></ProtectedRoute>} />
+              <Route path="/publish-success" element={<ProtectedRoute><PublishSuccess /></ProtectedRoute>} />
+              <Route path="/dashboard" element={<ProtectedRoute><AuthorDashboard /></ProtectedRoute>} />
+              <Route path="/admin" element={<ProtectedRoute><AdminPanel /></ProtectedRoute>} />
+              <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+              <Route path="/library" element={<Library />} />
+            </Routes>
+          </AnimatePresence>
+          
+          {/* Subtle footer */}
+          <footer className="px-12 py-12 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6">
+            <div className="text-[10px] uppercase tracking-[0.4em] text-muted-gray/40">
+              © 2026 Silentium. Knowledge in silence.
+            </div>
+            <div className="flex gap-8 text-[10px] uppercase tracking-[0.2em] text-muted-gray/40">
+              <a href="#" className="hover:text-muted-gray transition-colors">Privacy</a>
+              <a href="#" className="hover:text-muted-gray transition-colors">Terms</a>
+              <a href="#" className="hover:text-muted-gray transition-colors">Contact</a>
+            </div>
+          </footer>
           </div>
         </Router>
       </AuthContext.Provider>
-    </Router>
   );
 }
