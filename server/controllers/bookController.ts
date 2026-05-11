@@ -116,10 +116,10 @@ export const createBook = async (req: Request, res: Response) => {
     console.error('Upload error details:', error);
     const msg = typeof error?.message === 'string' ? error.message : 'Upload failed';
 
-    // Handle file size limit errors (now 50MB)
+    // Handle file size limit errors (now 10MB)
     if (msg.includes('File size too large') || msg.includes('file size') || msg.includes('LIMIT_FILE_SIZE')) {
       return res.status(413).json({
-        message: 'File size too large. Maximum file size is 50MB for book documents.',
+        message: 'File size too large. Maximum file size is 10MB for book documents (Cloudinary Free Tier limit).',
         code: 'FILE_TOO_LARGE'
       });
     }

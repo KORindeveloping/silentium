@@ -63,7 +63,13 @@ export const Reader: React.FC = () => {
 
   function onDocumentLoadError(error: Error) {
     console.error('PDF Load Error:', error);
-    setError(error.message);
+    let friendlyMessage = error.message;
+    if (error.message.includes('structure')) {
+      friendlyMessage = 'The file is not a valid PDF or is corrupted. Please ensure you uploaded a proper .pdf file.';
+    } else if (error.message.includes('fetch')) {
+      friendlyMessage = 'Network error while fetching the PDF. Check your connection or Cloudinary settings.';
+    }
+    setError(friendlyMessage);
   }
 
   const handleNextPage = () => {
