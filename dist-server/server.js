@@ -5,7 +5,7 @@ import { createServer as createViteServer } from "vite";
 import path3 from "path";
 import cors from "cors";
 import helmet from "helmet";
-import fs2 from "fs";
+import fs3 from "fs";
 import { fileURLToPath } from "url";
 
 // server/config/db.ts
@@ -214,14 +214,18 @@ var getFullUrl = (req, filePath) => {
 var registerUser = async (req, res, next) => {
   try {
     const { email, password, role } = req.body;
+    console.log(`Registration attempt: ${email}, role: ${role}`);
     if (!email || !password) {
+      console.log("Registration failed: Email or password missing");
       return res.status(400).json({ message: "Please provide email and password" });
     }
     if (!validatePassword(password)) {
+      console.log(`Registration failed: Password complexity check failed for ${email}`);
       return res.status(400).json({ message: "Password must be at least 8 characters, include an uppercase letter, a number, and a special character." });
     }
     const userExists = await User_default.findOne({ email });
     if (userExists) {
+      console.log(`Registration failed: User already exists (${email})`);
       return res.status(400).json({ message: "User already exists" });
     }
     const verificationToken = crypto.randomBytes(32).toString("hex");
@@ -232,8 +236,14 @@ var registerUser = async (req, res, next) => {
       verificationToken
     });
     if (user) {
+      console.log(`User created: ${user.email} (${user._id})`);
       if (user.role === "author") {
-        await Author_default.create({ userId: user._id });
+        try {
+          await Author_default.create({ userId: user._id });
+          console.log(`Author profile created for: ${user.email}`);
+        } catch (authorError) {
+          console.error(`Failed to create author profile for ${user.email}:`, authorError);
+        }
       }
       res.status(201).json({
         _id: user._id,
@@ -243,11 +253,14 @@ var registerUser = async (req, res, next) => {
         message: "Registration successful."
       });
     } else {
+      console.log("Registration failed: User creation returned null");
       res.status(400).json({ message: "Invalid user data" });
     }
   } catch (error) {
+    console.error("Registration error:", error);
     if (error.code === 11e3) {
-      return res.status(400).json({ message: "User already exists" });
+      const field = error.keyValue ? Object.keys(error.keyValue)[0] : "resource";
+      return res.status(400).json({ message: `${field} already exists` });
     }
     next(error);
   }
@@ -484,8 +497,8 @@ var upload = multer({
     checkFileType(file, cb);
   },
   limits: {
-    fileSize: 50 * 1024 * 1024
-    // 50MB limit for book documents
+    fileSize: 10 * 1024 * 1024
+    // 10MB limit for book documents (aligned with Cloudinary free tier)
   }
 });
 var uploadMiddleware_default = upload;
@@ -509,6 +522,9 @@ var authRoutes_default = router;
 
 // server/routes/bookRoutes.ts
 import express2 from "express";
+
+// server/controllers/bookController.ts
+import fs2 from "fs";
 
 // server/models/Book.ts
 import mongoose5, { Schema as Schema4 } from "mongoose";
@@ -636,16 +652,27 @@ var createBook = async (req, res) => {
         const result = await uploadToCloudinary(file.path, "books/files");
         fileUrl = result.secure_url;
         console.log(`File (${fileSizeMB.toFixed(1)}MB) uploaded to Cloudinary: ${result.secure_url}`);
-        const fs3 = await import("fs");
-        fs3.unlinkSync(file.path);
+        if (fs2.existsSync(file.path)) {
+          fs2.unlinkSync(file.path);
+        }
       } catch (error) {
         console.error("Cloudinary upload failed:", error);
-        throw new Error("Failed to upload file to cloud storage. Please try again.");
+        const errorMsg = error?.message || (typeof error === "string" ? error : JSON.stringify(error));
+        throw new Error(`Cloudinary upload failed: ${errorMsg || "Unknown error"}`);
       }
     }
     if (files?.["coverImage"]?.[0]) {
-      const result = await uploadToCloudinary(files["coverImage"][0].path, "books/covers");
-      coverImageUrl = result.secure_url;
+      try {
+        const result = await uploadToCloudinary(files["coverImage"][0].path, "books/covers");
+        coverImageUrl = result.secure_url;
+        if (fs2.existsSync(files["coverImage"][0].path)) {
+          fs2.unlinkSync(files["coverImage"][0].path);
+        }
+      } catch (error) {
+        console.error("Cloudinary cover image upload failed:", error);
+        const errorMsg = error?.message || (typeof error === "string" ? error : JSON.stringify(error));
+        throw new Error(`Cloudinary cover image upload failed: ${errorMsg || "Unknown error"}`);
+      }
     }
     const book = new Book_default({
       title,
@@ -669,6 +696,7 @@ var createBook = async (req, res) => {
     }
     res.status(201).json(createdBook);
   } catch (error) {
+    console.error("Upload error details:", error);
     const msg = typeof error?.message === "string" ? error.message : "Upload failed";
     if (msg.includes("File size too large") || msg.includes("file size") || msg.includes("LIMIT_FILE_SIZE")) {
       return res.status(413).json({
@@ -682,7 +710,18 @@ var createBook = async (req, res) => {
         code: "CLOUDINARY_MISSING_API_KEY"
       });
     }
-    res.status(400).json({ message: msg });
+    if (error?.name === "Error" && error?.http_code) {
+      return res.status(error.http_code).json({
+        message: `Cloudinary error: ${msg}`,
+        code: "CLOUDINARY_ERROR",
+        details: error
+      });
+    }
+    res.status(400).json({
+      message: msg,
+      code: "UPLOAD_ERROR",
+      details: error
+    });
   }
 };
 var streamBookFile = async (req, res) => {
@@ -1644,7 +1683,7 @@ app.get("/test-upload", (req, res) => {
   try {
     const testFile = path3.join(uploadsDir2, "test-sample.pdf");
     const testContent = "Sample PDF content for testing\nCreated: " + (/* @__PURE__ */ new Date()).toISOString();
-    fs2.writeFileSync(testFile, testContent);
+    fs3.writeFileSync(testFile, testContent);
     res.json({
       message: "Test file created",
       file: "test-sample.pdf",
@@ -1660,18 +1699,18 @@ console.log("Uploads directory:", uploadsDir2);
 console.log("Current working directory:", process.cwd());
 console.log("Environment UPLOADS_PATH:", process.env.UPLOADS_PATH);
 try {
-  if (!fs2.existsSync(uploadsDir2)) {
-    fs2.mkdirSync(uploadsDir2, { recursive: true });
+  if (!fs3.existsSync(uploadsDir2)) {
+    fs3.mkdirSync(uploadsDir2, { recursive: true });
     console.log("Created uploads directory:", uploadsDir2);
   } else {
     console.log("Uploads directory exists");
   }
   const testFile = path3.join(uploadsDir2, "test-access.txt");
-  fs2.writeFileSync(testFile, "test");
-  fs2.unlinkSync(testFile);
+  fs3.writeFileSync(testFile, "test");
+  fs3.unlinkSync(testFile);
   console.log("Uploads directory is writable");
   try {
-    const files = fs2.readdirSync(uploadsDir2);
+    const files = fs3.readdirSync(uploadsDir2);
     console.log("Files in uploads:", files.length > 0 ? files : "(empty)");
   } catch (err) {
     console.log("Cannot read uploads directory:", err.message);
@@ -1712,7 +1751,7 @@ var setupFrontend = async () => {
     }
   } else {
     const distPath = path3.join(process.cwd(), "dist");
-    if (fs2.existsSync(distPath)) {
+    if (fs3.existsSync(distPath)) {
       app.use(express9.static(distPath));
       app.get("*", (req, res, next) => {
         if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) return next();

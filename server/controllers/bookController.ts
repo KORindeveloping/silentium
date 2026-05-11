@@ -53,20 +53,21 @@ export const createBook = async (req: Request, res: Response) => {
     if (files?.['file']?.[0]) {
       const file = files['file'][0];
       const fileSizeMB = file.size / (1024 * 1024);
-      
+
       try {
         // Always upload to Cloudinary for permanent storage
         const result = await uploadToCloudinary(file.path, 'books/files');
         fileUrl = result.secure_url;
         console.log(`File (${fileSizeMB.toFixed(1)}MB) uploaded to Cloudinary: ${result.secure_url}`);
-        
+
         // Clean up temporary file
         if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
+          fs.unlinkSync(file.path);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Cloudinary upload failed:', error);
-        throw new Error(`Cloudinary upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        const errorMsg = error?.message || (typeof error === 'string' ? error : JSON.stringify(error));
+        throw new Error(`Cloudinary upload failed: ${errorMsg || 'Unknown error'}`);
       }
     }
 
@@ -75,14 +76,15 @@ export const createBook = async (req: Request, res: Response) => {
       try {
         const result = await uploadToCloudinary(files['coverImage'][0].path, 'books/covers');
         coverImageUrl = result.secure_url;
-        
+
         // Clean up temp file
         if (fs.existsSync(files['coverImage'][0].path)) {
-            fs.unlinkSync(files['coverImage'][0].path);
+          fs.unlinkSync(files['coverImage'][0].path);
         }
-      } catch (error) {
-          console.error('Cloudinary cover image upload failed:', error);
-          throw new Error(`Cloudinary cover image upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } catch (error: any) {
+        console.error('Cloudinary cover image upload failed:', error);
+        const errorMsg = error?.message || (typeof error === 'string' ? error : JSON.stringify(error));
+        throw new Error(`Cloudinary cover image upload failed: ${errorMsg || 'Unknown error'}`);
       }
     }
 
@@ -113,7 +115,7 @@ export const createBook = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Upload error details:', error);
     const msg = typeof error?.message === 'string' ? error.message : 'Upload failed';
-    
+
     // Handle file size limit errors (now 50MB)
     if (msg.includes('File size too large') || msg.includes('file size') || msg.includes('LIMIT_FILE_SIZE')) {
       return res.status(413).json({
@@ -121,7 +123,7 @@ export const createBook = async (req: Request, res: Response) => {
         code: 'FILE_TOO_LARGE'
       });
     }
-    
+
     if (/must supply api_key/i.test(msg)) {
       return res.status(503).json({
         message:
@@ -129,7 +131,7 @@ export const createBook = async (req: Request, res: Response) => {
         code: 'CLOUDINARY_MISSING_API_KEY'
       });
     }
-    
+
     // Handle specific Cloudinary errors
     if (error?.name === 'Error' && error?.http_code) {
       return res.status(error.http_code).json({
@@ -138,8 +140,8 @@ export const createBook = async (req: Request, res: Response) => {
         details: error
       });
     }
-    
-    res.status(400).json({ 
+
+    res.status(400).json({
       message: msg,
       code: 'UPLOAD_ERROR',
       details: error
@@ -315,7 +317,7 @@ export const deleteBook = async (req: Request, res: Response) => {
       res.status(401).json({ message: 'Not authorized' });
       return;
     }
-    
+
     await book.deleteOne();
     res.json({ message: 'Book removed' });
   } else {

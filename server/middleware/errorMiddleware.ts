@@ -92,11 +92,21 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
       });
     }
 
+    // Multer / File Upload Errors
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({
+        success: false,
+        message: 'File too large. Maximum size allowed is 10MB.',
+        code: 'FILE_TOO_LARGE'
+      });
+    }
+
     // Cloudinary/Upload Errors
     if (err.message?.includes('Cloudinary')) {
-      return res.status(500).json({
+      const isSizeError = err.message.includes('File size too large');
+      return res.status(isSizeError ? 413 : 400).json({
         success: false,
-        message: 'File upload service error',
+        message: err.message,
         code: 'UPLOAD_ERROR'
       });
     }

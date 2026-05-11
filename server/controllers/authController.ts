@@ -13,21 +13,21 @@ const generateToken = (id: string, rememberMe: boolean = false) => {
 };
 
 const validatePassword = (password: string) => {
-  return password.length >= 8 && 
-         /[A-Z]/.test(password) && 
-         /[0-9]/.test(password) && 
-         /[^A-Za-z0-9]/.test(password);
+  return password.length >= 8 &&
+    /[A-Z]/.test(password) &&
+    /[0-9]/.test(password) &&
+    /[^A-Za-z0-9]/.test(password);
 };
 
 const getFullUrl = (req: Request, filePath: string | undefined) => {
   if (!filePath) return undefined;
   if (filePath.startsWith('http')) return filePath;
-  
+
   let normalizedPath = filePath;
   if (path.isAbsolute(filePath)) {
     normalizedPath = `uploads/${path.basename(filePath)}`;
   }
-  
+
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   return `${baseUrl}/${normalizedPath.replace(/\\/g, '/').replace(/^\//, '')}`;
 };
@@ -36,17 +36,21 @@ const getFullUrl = (req: Request, filePath: string | undefined) => {
 export const registerUser = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password, role } = req.body;
+    console.log(`Registration attempt: ${email}, role: ${role}`);
 
     if (!email || !password) {
+      console.log('Registration failed: Email or password missing');
       return res.status(400).json({ message: 'Please provide email and password' });
     }
 
     if (!validatePassword(password)) {
+      console.log(`Registration failed: Password complexity check failed for ${email}`);
       return res.status(400).json({ message: 'Password must be at least 8 characters, include an uppercase letter, a number, and a special character.' });
     }
 
     const userExists = await User.findOne({ email });
     if (userExists) {
+      console.log(`Registration failed: User already exists (${email})`);
       return res.status(400).json({ message: 'User already exists' });
     }
 
@@ -59,8 +63,15 @@ export const registerUser = async (req: Request, res: Response, next: NextFuncti
     });
 
     if (user) {
+      console.log(`User created: ${user.email} (${user._id})`);
       if (user.role === 'author') {
-        await Author.create({ userId: user._id as any });
+        try {
+          await Author.create({ userId: user._id as any });
+          console.log(`Author profile created for: ${user.email}`);
+        } catch (authorError) {
+          console.error(`Failed to create author profile for ${user.email}:`, authorError);
+          // We don't fail registration if author profile creation fails, but we log it
+        }
       }
 
       res.status(201).json({
@@ -71,12 +82,15 @@ export const registerUser = async (req: Request, res: Response, next: NextFuncti
         message: 'Registration successful.'
       });
     } else {
+      console.log('Registration failed: User creation returned null');
       res.status(400).json({ message: 'Invalid user data' });
     }
   } catch (error: any) {
+    console.error('Registration error:', error);
     // Handle Mongoose duplicate key error specifically if it slips through findOne
     if (error.code === 11000) {
-      return res.status(400).json({ message: 'User already exists' });
+      const field = error.keyValue ? Object.keys(error.keyValue)[0] : 'resource';
+      return res.status(400).json({ message: `${field} already exists` });
     }
     next(error);
   }
@@ -141,7 +155,7 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
       user.passwordResetExpires = new Date(Date.now() + 1 * 60 * 60 * 1000);
       await user.save();
     }
-    
+
     res.json({ message: 'If a user with that email exists, a reset link has been sent.' });
   } catch (error: any) {
     next(error);
@@ -185,23 +199,23 @@ export const updateUserProfile = async (req: Request, res: Response, next: NextF
 
     // Professional Dynamic Field Update
     const allowedFields = ['name', 'username', 'phone', 'bio', 'location'];
-    
+
     allowedFields.forEach(field => {
       if (req.body[field] !== undefined) {
         (user as any)[field] = req.body[field];
       }
     });
-    
+
     if (req.file) {
       user.avatar = `uploads/${req.file.filename}`;
     }
-    
+
     if (req.body.notificationPreferences) {
       try {
-        const prefs = typeof req.body.notificationPreferences === 'string' 
-          ? JSON.parse(req.body.notificationPreferences) 
+        const prefs = typeof req.body.notificationPreferences === 'string'
+          ? JSON.parse(req.body.notificationPreferences)
           : req.body.notificationPreferences;
-          
+
         user.notificationPreferences = {
           ...user.notificationPreferences,
           ...prefs
