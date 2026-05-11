@@ -122,37 +122,52 @@ export const Reader: React.FC = () => {
         <div className={`bg-charcoal rounded-2xl border border-white/5 overflow-hidden transition-all duration-500 shadow-2xl relative ${showBlur ? 'max-h-[80vh]' : ''}`}>
           {doc.fileUrl ? (
             <div className="flex flex-col items-center py-8 min-h-[600px] relative">
-              <Document
-                file={(() => {
-                  if (!doc.fileUrl || !id) return null;
-                  // Use direct Cloudinary URL for permanent cloud storage
-                  return doc.fileUrl;
-                })()}
-                onLoadSuccess={onDocumentLoadSuccess}
-                onLoadError={onDocumentLoadError}
-                loading={<div className="text-muted-gray animate-pulse p-20 uppercase tracking-[0.5em] text-[10px]">Initializing Reader...</div>}
-                error={
-                  <div className="text-center p-20">
-                    <p className="text-red-400 uppercase tracking-widest text-xs mb-4">Failed to load PDF</p>
-                    <p className="text-muted-gray text-[10px] max-w-xs mx-auto">{error || 'Unknown error occurred while loading the document.'}</p>
-                    <button 
-                      onClick={() => window.location.reload()}
-                      className="mt-6 px-6 py-2 bg-white/5 border border-white/10 rounded-full text-[10px] uppercase tracking-widest hover:bg-white/10 transition-all"
-                    >
-                      Retry
-                    </button>
+              {doc.fileUrl?.toLowerCase().endsWith('.pdf') ? (
+                <Document
+                  file={doc.fileUrl}
+                  onLoadSuccess={onDocumentLoadSuccess}
+                  onLoadError={onDocumentLoadError}
+                  loading={<div className="text-muted-gray animate-pulse p-20 uppercase tracking-[0.5em] text-[10px]">Initializing Reader...</div>}
+                  error={
+                    <div className="text-center p-20">
+                      <p className="text-red-400 uppercase tracking-widest text-xs mb-4">Failed to load PDF</p>
+                      <p className="text-muted-gray text-[10px] max-w-xs mx-auto">{error || 'Unknown error occurred while loading the document.'}</p>
+                      <button 
+                        onClick={() => window.location.reload()}
+                        className="mt-6 px-6 py-2 bg-white/5 border border-white/10 rounded-full text-[10px] uppercase tracking-widest hover:bg-white/10 transition-all"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  }
+                  className="shadow-2xl"
+                >
+                  <Page 
+                    pageNumber={currentPage} 
+                    scale={scale} 
+                    renderAnnotationLayer={false}
+                    renderTextLayer={true}
+                    className="transition-opacity duration-300"
+                  />
+                </Document>
+              ) : (
+                <div className="text-center p-20">
+                  <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mx-auto mb-8 border border-white/10">
+                    <FileText size={32} className="text-muted-gray" />
                   </div>
-                }
-                className="shadow-2xl"
-              >
-                <Page 
-                  pageNumber={currentPage} 
-                  scale={scale} 
-                  renderAnnotationLayer={false}
-                  renderTextLayer={true}
-                  className="transition-opacity duration-300"
-                />
-              </Document>
+                  <h2 className="text-xl font-light mb-4 tracking-tight text-soft-white">Format Not Supported</h2>
+                  <p className="text-muted-gray max-w-sm mx-auto mb-10 text-[10px] uppercase tracking-widest leading-relaxed">
+                    The inline reader currently only supports PDF files. This document is a different format.
+                  </p>
+                  <a 
+                    href={doc.fileUrl} 
+                    download
+                    className="px-8 py-4 bg-soft-white text-void rounded-full text-[10px] uppercase tracking-[0.3em] font-black hover:bg-white transition-all inline-block"
+                  >
+                    Download File
+                  </a>
+                </div>
+              )}
 
               {/* Blur Overlay & Growth Hook */}
               <AnimatePresence>
