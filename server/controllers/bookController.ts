@@ -5,7 +5,7 @@ import { Readable } from 'node:stream';
 import Book from '../models/Book';
 import User from '../models/User';
 import { formatBookResponse } from '../utils/bookFormatter.js';
-import { uploadToCloudinary } from '../utils/cloudinaryHelper';
+import { uploadToCloudinary, getCloudinaryUrl } from '../utils/cloudinaryHelper';
 import { isCloudinaryConfigured } from '../config/cloudinary';
 import fetch from 'node-fetch';
 
@@ -168,14 +168,21 @@ export const streamBookFile = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Invalid book id format' });
     }
 
-    const book = await Book.findById(bookId).lean<{ fileUrl?: string, title?: string, visibility?: string }>();
-    if (!book || !book.fileUrl) {
+    const book = await Book.findById(bookId).select('+fileUrl +fileKey title visibility storageType').lean<{ fileUrl?: string, title?: string, visibility?: string, fileKey?: string, storageType?: string }>();
+    if (!book || (!book.fileUrl && !book.fileKey)) {
       return res.status(404).json({ message: 'Book not found or has no file' });
     }
 
     // PDF files should be publicly accessible - no auth check needed
-    const fileUrl = book.fileUrl;
-    const isCloudinary = fileUrl.includes('res.cloudinary.com');
+    let fileUrl = book.fileUrl;
+    const isCloudinary = book.storageType === 'cloudinary' || (fileUrl && fileUrl.includes('res.cloudinary.com'));
+    
+    // If no fileUrl but we have fileKey and storageType, construct URL
+    if (!fileUrl && book.fileKey && book.storageType) {
+      if (book.storageType === 'cloudinary') {
+        fileUrl = getCloudinaryUrl(book.fileKey, 'raw');
+      }
+    }
 
     // Set comprehensive CORS headers for PDF.js compatibility
     res.setHeader('Content-Type', 'application/pdf');

@@ -25,3 +25,11 @@ export const uploadToCloudinary = (filePath: string, folder: string, resourceTyp
     );
   });
 };
+
+export const getCloudinaryUrl = (publicId: string, resourceType: 'raw' | 'image' = 'raw'): string => {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  if (!cloudName) {
+    throw new Error('CLOUDINARY_CLOUD_NAME not configured');
+  }
+  return `https://res.cloudinary.com/${cloudName}/${resourceType}/upload/${publicId}`;
+};
