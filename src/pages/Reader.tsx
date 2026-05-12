@@ -28,7 +28,7 @@ export const Reader: React.FC = () => {
   const [isLocked, setIsLocked] = useState(false);
   const showBlur = isLocked && currentPage >= PREVIEW_LIMIT;
 
-  const { user: authUser, token } = useAuth();
+  const { user: authUser } = useAuth();
 
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
@@ -169,7 +169,7 @@ export const Reader: React.FC = () => {
             <div className="flex flex-col items-center py-8 min-h-[600px] relative">
               {doc.fileType === 'pdf' ? (
                 <Document
-                  file={pdfUrl}
+                  file={`${API_BASE_URL}/api/books/${id}/file${token ? `?token=${token}` : ''}`}
                   onLoadSuccess={onDocumentLoadSuccess}
                   onLoadError={onDocumentLoadError}
                   loading={<div className="text-muted-gray animate-pulse p-20 uppercase tracking-[0.5em] text-[10px]">Initializing Reader...</div>}
@@ -185,7 +185,7 @@ export const Reader: React.FC = () => {
                           Retry
                         </button>
                         <a 
-                          href={`${API_BASE_URL}/api/books/${id}/file`}
+                          href={`${API_BASE_URL}/api/books/${id}/file${token ? `?token=${token}` : ''}`}
                           download
                           className="px-6 py-2 bg-soft-white text-void rounded-full text-[10px] uppercase tracking-widest hover:bg-white transition-all inline-block"
                         >

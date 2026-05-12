@@ -168,121 +168,110 @@ export const streamBookFile = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Invalid book id format' });
     }
 
-    const book = await Book.findById(bookId).lean<any>();
-    if (!book) return res.status(404).json({ message: 'Book not found' });
-
-    let storageType = book.storageType;
-    let fileKey = book.fileKey;
-    let fileUrl = book.fileUrl;
-
-    // Legacy Fallback
-    if (!storageType && fileUrl) {
-      storageType = fileUrl.includes('cloudinary') ? 'cloudinary' : 'local';
+    const book = await Book.findById(bookId).lean<{ fileUrl?: string, title?: string, visibility?: string }>();
+    if (!book || !book.fileUrl) {
+      return res.status(404).json({ message: 'Book not found or has no file' });
     }
 
-    // Standard Streaming Headers
-    res.setHeader('Cache-Control', 'private, max-age=3600');
-    res.setHeader('Accept-Ranges', 'bytes');
+    // PDF files should be publicly accessible - no auth check needed
+    const fileUrl = book.fileUrl;
+    const isCloudinary = fileUrl.includes('res.cloudinary.com');
+
+    // Set comprehensive CORS headers for PDF.js compatibility
+    res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization');
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
     
+    // Optional: Set filename for downloads
     const fileName = (book.title || 'document').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    res.setHeader('Content-Disposition', `inline; filename="${fileName}.pdf"`);
 
-    if (storageType === 'cloudinary') {
+    if (isCloudinary) {
       try {
-        let targetUrl = fileUrl;
+        console.log(`Proxying Cloudinary file: ${fileUrl}`);
         
-        if (fileKey && isCloudinaryConfigured()) {
-          const { v2: cloudinary } = await import('cloudinary');
-          
-          // First try: default 'raw' resource type (current upload behavior)
-          targetUrl = cloudinary.url(fileKey, {
-            resource_type: 'raw',
-            secure: true
+        // Add transformation to ensure raw file access and avoid 401 errors
+        const rawUrl = fileUrl.replace(/\/upload\//, '/upload/fl_attachment/').replace(/\.[^.]+$/, '');
+        const response = await fetch(rawUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; Silentium-PDF-Viewer)',
+            'Accept': 'application/pdf,*/*'
+          }
+        });
+        
+        if (!response.ok) {
+          console.error(`Cloudinary fetch failed: ${response.status} ${response.statusText}`);
+          return res.status(response.status).json({ 
+            message: `Failed to fetch file from cloud storage (${response.status})`,
+            url: rawUrl,
+            error: response.statusText
           });
-          
-          let response = await fetch(targetUrl, {
-            headers: { 'User-Agent': 'Silentium-PDF-Proxy', 'Accept': 'application/pdf' },
-            redirect: 'follow'
-          });
-
-          // If 404, fallback to 'image' resource type (legacy PDF upload behavior)
-          if (response.status === 404) {
-             const fallbackUrl = cloudinary.url(fileKey, {
-               resource_type: 'image',
-               secure: true
-             });
-             response = await fetch(fallbackUrl, {
-               headers: { 'User-Agent': 'Silentium-PDF-Proxy', 'Accept': 'application/pdf' },
-               redirect: 'follow'
-             });
-          }
-
-          if (!response.ok) {
-             return res.status(response.status).json({ message: 'Cloud storage rejected the request', status: response.status });
-          }
-
-          res.setHeader('Content-Type', 'application/pdf');
-          res.setHeader('Content-Disposition', `inline; filename="${fileName}.pdf"`);
-          
-          if (response.body) {
-            const readableStream = Readable.fromWeb(response.body as any);
-            readableStream.pipe(res);
-            res.on('close', () => readableStream.destroy());
-          }
-        } else if (targetUrl) {
-           // Fallback if cloudinary not configured but we have a url
-           const response = await fetch(targetUrl);
-           if (!response.ok) return res.status(response.status).json({ message: 'Failed to fetch from fallback URL' });
-           res.setHeader('Content-Type', 'application/pdf');
-           res.setHeader('Content-Disposition', `inline; filename="${fileName}.pdf"`);
-           if (response.body) {
-             const readableStream = Readable.fromWeb(response.body as any);
-             readableStream.pipe(res);
-             res.on('close', () => readableStream.destroy());
-           }
+        }
+        
+        if (response.body) {
+          res.status(response.status);
+          response.body.pipe(res);
         } else {
-           return res.status(404).json({ message: 'No file source found' });
+          res.status(500).json({ message: 'Cloud storage response has no body' });
         }
       } catch (error: any) {
-        if (!res.headersSent) res.status(500).json({ message: 'Cloud stream error', error: error.message });
+        console.error('Proxy Error (Cloudinary):', error);
+        if (!res.headersSent) {
+          res.status(500).json({ 
+            message: 'Error streaming from cloud storage',
+            error: error.message 
+          });
+        }
       }
     } else {
-      // Local Storage Logic
-      const relativePath = fileKey || extractUploadsRelative(fileUrl || '');
-      if (!relativePath) return res.status(404).json({ message: 'File not found' });
+      // Local Storage Fallback
+      const relativePath = extractUploadsRelative(fileUrl || '');
+      if (relativePath) {
+        const localPath = path.join(uploadsDirRoot(), relativePath);
+        if (fs.existsSync(localPath)) {
+          const stat = fs.statSync(localPath);
+          const fileSize = stat.size;
+          const range = req.headers.range;
 
-      const localPath = path.join(uploadsDirRoot(), relativePath);
-      if (fs.existsSync(localPath)) {
-        const stat = fs.statSync(localPath);
-        const fileSize = stat.size;
-        const range = req.headers.range;
-
-        if (range) {
-          const parts = range.replace(/bytes=/, "").split("-");
-          const start = parseInt(parts[0], 10);
-          const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-          const chunksize = (end - start) + 1;
-          const file = fs.createReadStream(localPath, { start, end });
-          
-          res.writeHead(206, {
-            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-            'Content-Length': chunksize,
-            'Content-Type': 'application/pdf',
-            'Content-Disposition': `inline; filename="${fileName}.pdf"`,
-          });
-          file.pipe(res);
+          if (range) {
+            const parts = range.replace(/bytes=/, "").split("-");
+            const start = parseInt(parts[0], 10);
+            const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+            const chunksize = (end - start) + 1;
+            const file = fs.createReadStream(localPath, { start, end });
+            
+            res.writeHead(206, {
+              'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+              'Content-Length': chunksize,
+              'Content-Type': 'application/pdf',
+              'Content-Disposition': `inline; filename="${fileName}.pdf"`,
+            });
+            file.pipe(res);
+          } else {
+            res.writeHead(200, {
+              'Content-Length': fileSize,
+              'Content-Type': 'application/pdf',
+              'Content-Disposition': `inline; filename="${fileName}.pdf"`,
+            });
+            fs.createReadStream(localPath).pipe(res);
+          }
         } else {
-          res.writeHead(200, {
-            'Content-Length': fileSize,
-            'Content-Type': 'application/pdf',
-            'Content-Disposition': `inline; filename="${fileName}.pdf"`,
-          });
-          fs.createReadStream(localPath).pipe(res);
+          res.status(404).json({ message: 'Local file not found' });
         }
       } else {
-        res.status(404).json({ message: 'Local file not found' });
+        // Fallback: Redirect if we can't handle it
+        console.log(`Fallback redirect to: ${fileUrl}`);
+        res.redirect(302, fileUrl);
       }
+    } else {
+      // Fallback: Redirect if we can't handle it
+      console.log(`Fallback redirect to: ${fileUrl}`);
+      res.redirect(302, fileUrl);
+    }
     }
   } catch (globalError: any) {
     if (!res.headersSent) res.status(500).json({ message: 'Proxy fatal error', error: globalError.message });
