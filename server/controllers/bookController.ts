@@ -209,11 +209,13 @@ export const streamBookFile = async (req: Request, res: Response) => {
           const uploadIdx = parts.indexOf('upload');
           if (uploadIdx !== -1 && uploadIdx + 2 < parts.length) {
              const publicIdWithExt = parts.slice(uploadIdx + 2).join('/');
-             console.log(`[PDF Proxy] Extracted public ID for signing: ${publicIdWithExt}`);
+             const resourceTypeFromUrl = parts[uploadIdx - 1] as 'image' | 'raw' | 'video' | 'auto' || 'raw';
+             
+             console.log(`[PDF Proxy] Extracted public ID for signing: ${publicIdWithExt}, resource_type: ${resourceTypeFromUrl}`);
              
              const { v2: cloudinary } = await import('cloudinary');
              const signedUrl = cloudinary.url(publicIdWithExt, {
-               resource_type: 'raw',
+               resource_type: resourceTypeFromUrl,
                secure: true,
                sign_url: true,
                expires_at: Math.floor(Date.now() / 1000) + 3600 // URL valid for 1 hour

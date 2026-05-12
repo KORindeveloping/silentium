@@ -58,7 +58,7 @@ export const BookCard: React.FC<BookCardProps> = ({ book, isSkeleton, onQuickVie
             {/* Scaled PDF Preview Iframe */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden origin-top-left scale-[0.4] w-[250%] h-[250%]">
               <iframe 
-                src={`${normalizedFileUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`} 
+                src={`${API_BASE_URL}/api/books/${book._id}/file#toolbar=0&navpanes=0&scrollbar=0&view=FitH`} 
                 className="w-full h-full border-none"
                 title={`Preview of ${book.title}`}
               />
