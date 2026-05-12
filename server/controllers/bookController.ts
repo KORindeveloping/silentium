@@ -169,6 +169,8 @@ export const streamBookFile = async (req: Request, res: Response) => {
     }
 
     console.log(`[DEBUG] Looking for book with ID: ${bookId}`);
+    console.log(`[DEBUG] ID format valid:`, /^[a-fA-F0-9]{24}$/.test(bookId));
+    
     const book = await Book.findById(bookId).select('+fileUrl +fileKey title visibility storageType').lean<{ fileUrl?: string, title?: string, visibility?: string, fileKey?: string, storageType?: string }>();
     console.log(`[DEBUG] Book found:`, !!book);
     if (book) {
@@ -176,8 +178,11 @@ export const streamBookFile = async (req: Request, res: Response) => {
         fileUrl: !!book.fileUrl,
         fileKey: !!book.fileKey,
         storageType: book.storageType,
-        title: book.title
+        title: book.title,
+        _id: book._id
       });
+    } else {
+      console.log(`[DEBUG] Book not found in database`);
     }
     if (!book || (!book.fileUrl && !book.fileKey)) {
       console.log(`[DEBUG] Returning 404 - book: ${!!book}, fileUrl: ${!!book?.fileUrl}, fileKey: ${!!book?.fileKey}`);
