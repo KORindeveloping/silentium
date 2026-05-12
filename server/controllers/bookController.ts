@@ -260,18 +260,10 @@ export const streamBookFile = async (req: Request, res: Response) => {
             fs.createReadStream(localPath).pipe(res);
           }
         } else {
-          res.status(404).json({ message: 'Local file not found' });
+          console.log(`Fallback redirect to: ${fileUrl}`);
+          res.redirect(302, fileUrl);
         }
-      } else {
-        // Fallback: Redirect if we can't handle it
-        console.log(`Fallback redirect to: ${fileUrl}`);
-        res.redirect(302, fileUrl);
       }
-    } else {
-      // Fallback: Redirect if we can't handle it
-      console.log(`Fallback redirect to: ${fileUrl}`);
-      res.redirect(302, fileUrl);
-    }
     }
   } catch (globalError: any) {
     if (!res.headersSent) res.status(500).json({ message: 'Proxy fatal error', error: globalError.message });
