@@ -54,8 +54,9 @@ export const Reader: React.FC = () => {
     const fetchPdfBlob = async () => {
       try {
         const headers: Record<string, string> = {};
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
+        const currentToken = localStorage.getItem('token');
+        if (currentToken) {
+          headers['Authorization'] = `Bearer ${currentToken}`;
         }
         const response = await fetch(`${API_BASE_URL}/api/books/${id}/file`, { headers });
         if (!response.ok) throw new Error(`Failed to fetch PDF (${response.status})`);
@@ -71,15 +72,16 @@ export const Reader: React.FC = () => {
     fetchPdfBlob();
 
     const interval = setInterval(() => {
-      if (token) {
+      const currentToken = localStorage.getItem('token');
+      if (currentToken) {
         fetch(`${API_BASE_URL}/api/analytics/track`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}` 
+            'Authorization': `Bearer ${currentToken}` 
           },
           body: JSON.stringify({ bookId: id, minutes: 0.5 })
-        });
+        }).catch(() => {});
       }
     }, 30000);
 
