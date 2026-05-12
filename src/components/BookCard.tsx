@@ -53,21 +53,13 @@ export const BookCard: React.FC<BookCardProps> = ({ book, isSkeleton, onQuickVie
             alt={book.title} 
             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
           />
-        ) : isPDF && normalizedFileUrl ? (
-          <div className="w-full h-full bg-white relative group-hover:bg-white/90 transition-colors">
-            {/* Scaled PDF Preview Iframe */}
-            <div className="absolute inset-0 pointer-events-none overflow-hidden origin-top-left scale-[0.4] w-[250%] h-[250%]">
-              <iframe 
-                src={`${API_BASE_URL}/api/books/${book._id}/file#toolbar=0&navpanes=0&scrollbar=0&view=FitH`} 
-                className="w-full h-full border-none"
-                title={`Preview of ${book.title}`}
-              />
-            </div>
-            {/* Subtle Overlay to make it look like a card */}
-            <div className="absolute inset-0 bg-void/10 group-hover:bg-transparent transition-colors" />
-            <div className="absolute bottom-4 right-4 bg-void/80 backdrop-blur-md p-1.5 rounded-lg border border-white/10 shadow-xl">
-               <FileText size={14} className="text-soft-white" />
-            </div>
+        ) : isPDF ? (
+          <div className="w-full h-full bg-charcoal p-12 flex flex-col items-center justify-center text-center relative group-hover:bg-charcoal/80 transition-colors">
+             <FileText size={48} className="text-soft-white/10 mb-4 group-hover:scale-110 transition-transform duration-500" />
+             <p className="text-[10px] uppercase tracking-[0.3em] text-muted-gray/40">PDF Document</p>
+             <div className="absolute bottom-4 right-4 bg-void/80 backdrop-blur-md p-1.5 rounded-lg border border-white/10 shadow-xl">
+                <FileText size={14} className="text-soft-white" />
+             </div>
           </div>
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-ash to-void p-6 flex flex-col items-center justify-center text-center relative">

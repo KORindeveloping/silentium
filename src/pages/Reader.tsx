@@ -30,6 +30,8 @@ export const Reader: React.FC = () => {
 
   const { user: authUser, token } = useAuth();
 
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+
   useEffect(() => {
     // Set user from auth context if available
     if (authUser && token) {
@@ -39,6 +41,27 @@ export const Reader: React.FC = () => {
     fetch(`${API_BASE_URL}/api/books/${id}`)
       .then(res => res.json())
       .then(data => setDoc(data));
+
+    // Fetch PDF as blob with Authorization header
+    const fetchPdfBlob = async () => {
+      if (!token) return;
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/books/${id}/file`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (!response.ok) throw new Error('Failed to fetch PDF');
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        setPdfUrl(url);
+      } catch (err) {
+        console.error('Error fetching PDF blob:', err);
+        setError('Failed to securely stream PDF. Please ensure you are logged in.');
+      }
+    };
+
+    fetchPdfBlob();
 
     const interval = setInterval(() => {
       if (token) {
@@ -53,8 +76,11 @@ export const Reader: React.FC = () => {
       }
     }, 30000);
 
-    return () => clearInterval(interval);
-  }, [id]);
+    return () => {
+      clearInterval(interval);
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    };
+  }, [id, token]);
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
@@ -134,7 +160,7 @@ export const Reader: React.FC = () => {
             <div className="flex flex-col items-center py-8 min-h-[600px] relative">
               {doc.fileUrl?.toLowerCase().endsWith('.pdf') ? (
                 <Document
-                  file={`${API_BASE_URL}/api/books/${id}/file`}
+                  file={pdfUrl}
                   onLoadSuccess={onDocumentLoadSuccess}
                   onLoadError={onDocumentLoadError}
                   loading={<div className="text-muted-gray animate-pulse p-20 uppercase tracking-[0.5em] text-[10px]">Initializing Reader...</div>}

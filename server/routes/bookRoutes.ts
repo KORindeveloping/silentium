@@ -6,7 +6,7 @@ import { asyncHandler } from '../middleware/asyncHandler';
 
 const router = express.Router();
 
-router.get('/:id/file', asyncHandler(streamBookFile));
+router.get('/:id/file', protect, asyncHandler(streamBookFile));
 
 router.route('/')
   .get(asyncHandler(getBooks))
