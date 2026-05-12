@@ -41,6 +41,20 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
   }
 };
 
+// Like protect, but doesn't block — attaches user if token is valid, continues regardless
+export const optionalProtect = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (token) {
+    try {
+      const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+      req.user = await User.findById(decoded.id).select('-passwordHash');
+    } catch {
+      // Token invalid — that's fine, proceed without user
+    }
+  }
+  return next();
+};
+
 export const admin = (req: AuthRequest, res: Response, next: NextFunction) => {
   if (typeof next !== 'function') return res.status(500).json({ message: 'next is not a function' });
   if (req.user && req.user.role === 'admin') {

@@ -50,23 +50,21 @@ export const Reader: React.FC = () => {
         setIsLocked(!authUser || (!hasCredits && !isAdmin && !isOwner));
       });
 
-    // Fetch PDF as blob with Authorization header
+    // Fetch PDF as blob — sends auth header if available for analytics
     const fetchPdfBlob = async () => {
-      if (!token) return;
       try {
-        const response = await fetch(`${API_BASE_URL}/api/books/${id}/file`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        if (!response.ok) throw new Error('Failed to fetch PDF');
+        const headers: Record<string, string> = {};
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+        const response = await fetch(`${API_BASE_URL}/api/books/${id}/file`, { headers });
+        if (!response.ok) throw new Error(`Failed to fetch PDF (${response.status})`);
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
-        console.log("PDF LOADING URL (BLOB):", url);
         setPdfUrl(url);
       } catch (err) {
         console.error('Error fetching PDF blob:', err);
-        setError('Failed to securely stream PDF. Please ensure you are logged in.');
+        setError('Failed to load PDF. Please try refreshing the page.');
       }
     };
 

@@ -1,12 +1,12 @@
 import express from 'express';
 import { getBooks, getBookById, createBook, updateBook, deleteBook, toggleLike, streamBookFile } from '../controllers/bookController';
-import { protect, author } from '../middleware/authMiddleware';
+import { protect, optionalProtect, author } from '../middleware/authMiddleware';
 import upload from '../middleware/uploadMiddleware';
 import { asyncHandler } from '../middleware/asyncHandler';
 
 const router = express.Router();
 
-router.get('/:id/file', protect, asyncHandler(streamBookFile));
+router.get('/:id/file', optionalProtect, asyncHandler(streamBookFile));
 
 router.route('/')
   .get(asyncHandler(getBooks))
