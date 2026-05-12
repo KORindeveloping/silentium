@@ -75,12 +75,47 @@ if (isDev) {
   }));
 }
 
-app.use(cors({
-  origin: ["https://silentium.vercel.app", "http://localhost:5173", "http://localhost:3000"],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-}));
+const allowedOrigins = [
+  "https://silentium.vercel.app",
+  "https://silentium-m9z8.onrender.com",
+  "http://localhost:5173",
+  "http://localhost:3000"
+];
+
+const corsOptions: cors.CorsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+
+    if (
+      allowedOrigins.includes(origin) ||
+      origin.endsWith(".vercel.app") ||
+      origin.includes("vercel.app")
+    ) {
+      return callback(null, true);
+    }
+
+    console.error("Blocked by CORS: ", origin);
+    return callback(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+    "Accept",
+    "Origin",
+    "X-Auth-Token"
+  ],
+  exposedHeaders: ["Content-Range", "X-Content-Range"],
+  maxAge: 86400 // 24 hours
+};
+
+app.use(cors(corsOptions));
+
+// Handle preflight requests for all routes explicitly with the same config
+app.options("*", cors(corsOptions));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -150,9 +185,8 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 // Serve static files from uploads directory with CORS headers
-app.use('/uploads', (req, res, next) => {
+app.use('/uploads', cors(corsOptions), (req, res, next) => {
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  res.setHeader('Access-Control-Allow-Origin', '*');
   next();
 }, (req, res, next) => {
   // Custom handler for /uploads to return JSON 404 for missing files
