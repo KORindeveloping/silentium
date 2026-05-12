@@ -264,6 +264,39 @@ const setupFrontend = async () => {
   app.use(errorHandler);
 
   if (!process.env.VERCEL) {
+    // Temporary Migration Route (Scribd-level transition)
+    app.post('/api/admin/migrate-books', async (req, res) => {
+      const adminSecret = req.headers['x-admin-secret'];
+      if (adminSecret !== process.env.JWT_SECRET) {
+        return res.status(401).json({ message: 'Unauthorized' });
+      }
+
+      try {
+        const Book = (await import('./server/models/Book.js')).default;
+        const books = await Book.find({ storageType: { $exists: false }, fileUrl: { $exists: true, $ne: null } });
+        let count = 0;
+
+        for (const book of books) {
+          if (book.fileUrl.includes('cloudinary')) {
+            book.storageType = 'cloudinary';
+            const parts = book.fileUrl.split('/');
+            const uploadIdx = parts.indexOf('upload');
+            if (uploadIdx !== -1 && uploadIdx + 2 < parts.length) {
+               book.fileKey = parts.slice(uploadIdx + 2).join('/').split('.')[0];
+            }
+          } else {
+            book.storageType = 'local';
+            book.fileKey = book.fileUrl.replace(/\\/g, '/');
+          }
+          await book.save();
+          count++;
+        }
+        res.json({ message: `Successfully migrated ${count} books`, count });
+      } catch (error: any) {
+        res.status(500).json({ message: 'Migration failed', error: error.message });
+      }
+    });
+
     const PORT = Number(process.env.PORT) || 3000;
     const HOST = process.env.RENDER ? '0.0.0.0' : 'localhost';
     
