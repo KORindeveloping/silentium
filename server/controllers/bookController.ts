@@ -168,8 +168,19 @@ export const streamBookFile = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Invalid book id format' });
     }
 
+    console.log(`[DEBUG] Looking for book with ID: ${bookId}`);
     const book = await Book.findById(bookId).select('+fileUrl +fileKey title visibility storageType').lean<{ fileUrl?: string, title?: string, visibility?: string, fileKey?: string, storageType?: string }>();
+    console.log(`[DEBUG] Book found:`, !!book);
+    if (book) {
+      console.log(`[DEBUG] Book data:`, {
+        fileUrl: !!book.fileUrl,
+        fileKey: !!book.fileKey,
+        storageType: book.storageType,
+        title: book.title
+      });
+    }
     if (!book || (!book.fileUrl && !book.fileKey)) {
+      console.log(`[DEBUG] Returning 404 - book: ${!!book}, fileUrl: ${!!book?.fileUrl}, fileKey: ${!!book?.fileKey}`);
       return res.status(404).json({ message: 'Book not found or has no file' });
     }
 
