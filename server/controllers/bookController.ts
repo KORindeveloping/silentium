@@ -178,15 +178,20 @@ export const streamBookFile = async (req: Request, res: Response) => {
         fileUrl: !!book.fileUrl,
         fileKey: !!book.fileKey,
         storageType: book.storageType,
-        title: book.title,
-        _id: book._id
+        title: book.title
       });
     } else {
       console.log(`[DEBUG] Book not found in database`);
     }
-    if (!book || (!book.fileUrl && !book.fileKey)) {
-      console.log(`[DEBUG] Returning 404 - book: ${!!book}, fileUrl: ${!!book?.fileUrl}, fileKey: ${!!book?.fileKey}`);
-      return res.status(404).json({ message: 'Book not found or has no file' });
+    if (!book) {
+      console.log(`[DEBUG] Book not found in database`);
+      return res.status(404).json({ message: 'Book not found' });
+    }
+    
+    // Check if book has any file information
+    if (!book.fileUrl && !book.fileKey) {
+      console.log(`[DEBUG] Book has no file information - fileUrl: ${!!book?.fileUrl}, fileKey: ${!!book?.fileKey}`);
+      return res.status(404).json({ message: 'Book has no file' });
     }
 
     // PDF files should be publicly accessible - no auth check needed
