@@ -31,7 +31,6 @@ export const BookCard: React.FC<BookCardProps> = ({ book, isSkeleton, onQuickVie
     : null;
 
   const isPDF = book.fileType === 'pdf';
-  const isPDF = book.fileType === 'pdf';
   const proxyFileUrl = `${API_BASE_URL}/api/books/${book._id}/file`;
 
   return (
