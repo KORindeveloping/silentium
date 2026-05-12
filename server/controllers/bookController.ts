@@ -59,10 +59,9 @@ export const createBook = async (req: Request, res: Response) => {
 
       try {
         const result = await uploadToCloudinary(file.path, 'books/files', 'raw');
-        fileUrl = result.secure_url;
         fileKey = result.public_id;
         storageType = 'cloudinary';
-        console.log(`File (${fileSizeMB.toFixed(1)}MB) uploaded to Cloudinary. Key: ${fileKey}`);
+        console.log(`File uploaded to Cloudinary. Key: ${fileKey}`);
 
         // Clean up temporary file
         if (fs.existsSync(file.path)) {
@@ -96,7 +95,6 @@ export const createBook = async (req: Request, res: Response) => {
       description,
       category,
       tags: tags ? (typeof tags === 'string' ? tags.split(',').map((t: string) => t.trim()) : tags) : [],
-      fileUrl,
       fileKey,
       storageType,
       coverImage: coverImageUrl,
@@ -325,7 +323,7 @@ export const getBooks = async (req: Request, res: Response) => {
 
   const formattedBooks = books.map(book => {
     const b = book as any;
-    return {
+    const response = {
       _id: b._id,
       title: b.title,
       description: b.description,
@@ -334,11 +332,12 @@ export const getBooks = async (req: Request, res: Response) => {
       author: {
         _id: b.authorId?._id,
         name: b.authorId?.name || b.authorId?.email?.split('@')[0] || 'Unknown',
-        avatar: b.authorId?.avatar, // Already full URL
+        avatar: b.authorId?.avatar, 
         credits: b.authorId?.credits
       },
-      coverImage: b.coverImage, // Already full URL
-      fileUrl: b.fileUrl ? `${API_BASE_URL}/api/books/${b._id}/file` : null,
+      coverImage: b.coverImage,
+      fileUrl: `${API_BASE_URL}/api/books/${b._id}/file`,
+      fileKey: b.fileKey,
       content: b.content,
       pageCount: b.pageCount,
       views: b.views,
@@ -348,6 +347,12 @@ export const getBooks = async (req: Request, res: Response) => {
       visibility: b.visibility,
       createdAt: b.createdAt,
     };
+    
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[API] Returning book ${b._id}: fileUrl=${response.fileUrl}`);
+    }
+    
+    return response;
   });
 
   res.json({ books: formattedBooks, page, pages: Math.ceil(count / pageSize), total: count });
@@ -364,7 +369,7 @@ export const getBookById = async (req: Request, res: Response) => {
     await book.save();
 
     const b = book as any;
-    res.json({
+    const response = {
       _id: b._id,
       title: b.title,
       description: b.description,
@@ -377,7 +382,8 @@ export const getBookById = async (req: Request, res: Response) => {
         credits: b.authorId?.credits
       },
       coverImage: b.coverImage,
-      fileUrl: b.fileUrl ? `${API_BASE_URL}/api/books/${b._id}/file` : null,
+      fileUrl: `${API_BASE_URL}/api/books/${b._id}/file`,
+      fileKey: b.fileKey,
       content: b.content,
       pageCount: b.pageCount,
       views: b.views,
@@ -387,7 +393,15 @@ export const getBookById = async (req: Request, res: Response) => {
       status: b.status,
       visibility: b.visibility,
       createdAt: b.createdAt,
-    });
+    };
+
+    console.log(`[API] Detailed Book Response for ${b._id}:`, JSON.stringify({
+      id: response._id,
+      fileUrl: response.fileUrl,
+      hasFileKey: !!response.fileKey
+    }));
+
+    res.json(response);
   } else {
     res.status(404).json({ message: 'Book not found' });
   }
