@@ -2,11 +2,17 @@ import { Request } from 'express';
 
 export const formatBookResponse = (req: Request, book: any) => {
   const b = book._doc || book;
-  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  // Force HTTPS in production (Render terminates TLS at load balancer, so req.protocol is 'http')
+  const protocol = process.env.NODE_ENV === 'production' ? 'https' : req.protocol;
+  const baseUrl = `${protocol}://${req.get('host')}`;
   
   const getFullUrl = (relativePath: string | undefined) => {
     if (!relativePath) return undefined;
-    if (relativePath.startsWith('http')) return relativePath;
+    // Force upgrade any http:// URL to https://
+    if (relativePath.startsWith('http://')) {
+      return relativePath.replace('http://', 'https://');
+    }
+    if (relativePath.startsWith('https://')) return relativePath;
     return `${baseUrl}/${relativePath.replace(/\\/g, '/').replace(/^\//, '')}`;
   };
 
@@ -23,9 +29,10 @@ export const formatBookResponse = (req: Request, book: any) => {
       credits: b.authorId.credits
     } : undefined,
     coverImage: getFullUrl(b.coverImage),
-    fileUrl: `${baseUrl}/api/books/${b._id}/file`, // Guaranteed Proxy URL
+    // Proxy URL only — never expose raw storage URLs
+    fileUrl: `${baseUrl}/api/books/${b._id}/file`,
     fileType: b.fileUrl?.toLowerCase().endsWith('.pdf') || b.fileKey?.toLowerCase().endsWith('.pdf') ? 'pdf' : 'other',
-    fileKey: b.fileKey, // Optional: useful for debugging but safe
+    // fileKey intentionally omitted — internal storage detail, never expose to client
     content: b.content,
     pageCount: b.pageCount,
     views: b.views,

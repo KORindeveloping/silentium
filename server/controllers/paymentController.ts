@@ -16,6 +16,11 @@ export const createCheckoutSession = async (req: Request, res: Response) => {
   }
 
   try {
+    const rawAppUrl = process.env.APP_URL || 'http://localhost:3000';
+    const appUrl = (process.env.NODE_ENV === 'production' && rawAppUrl.startsWith('http://'))
+      ? rawAppUrl.replace('http://', 'https://')
+      : rawAppUrl;
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [{
@@ -28,8 +33,8 @@ export const createCheckoutSession = async (req: Request, res: Response) => {
         quantity: 1,
       }],
       mode: 'subscription',
-      success_url: `${process.env.APP_URL || 'http://localhost:3000'}/?success=true`,
-      cancel_url: `${process.env.APP_URL || 'http://localhost:3000'}/?canceled=true`,
+      success_url: `${appUrl}/?success=true`,
+      cancel_url: `${appUrl}/?canceled=true`,
       customer_email: (req as any).user.email,
     });
 

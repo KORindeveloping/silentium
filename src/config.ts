@@ -1,14 +1,11 @@
 const rawApiUrl = import.meta.env.VITE_API_URL || '';
 
-if (import.meta.env.PROD && rawApiUrl.startsWith('http://')) {
-  console.error('❌ SECURITY ALERT: Insecure HTTP backend detected on production. Mixed Content will be blocked.');
-  throw new Error('Insecure API Configuration: Use HTTPS for production backend.');
-}
+// Force-upgrade HTTP to HTTPS — prevents Mixed Content blocking in production
+export const API_BASE_URL = rawApiUrl.replace(/^http:\/\//i, 'https://');
 
-// Global Protocol Shield: Automatically upgrade HTTP to HTTPS to prevent Mixed Content errors
-export const API_BASE_URL = rawApiUrl.startsWith('http://') 
-  ? rawApiUrl.replace('http://', 'https://') 
-  : rawApiUrl;
 if (import.meta.env.PROD) {
-  console.log('Production API Base URL:', API_BASE_URL);
+  if (rawApiUrl !== API_BASE_URL) {
+    console.warn('⚠️ VITE_API_URL was HTTP — auto-upgraded to HTTPS:', API_BASE_URL);
+  }
+  console.log('API Base URL:', API_BASE_URL);
 }
