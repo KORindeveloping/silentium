@@ -93,6 +93,21 @@ const BookSchema: Schema = new Schema({
   }],
 }, {
   timestamps: true,
+  toJSON: {
+    transform: (doc, ret) => {
+      // Hard security lock: never return these fields in raw JSON
+      delete ret.fileUrl;
+      delete ret.fileKey;
+      return ret;
+    }
+  },
+  toObject: {
+    transform: (doc, ret) => {
+      delete ret.fileUrl;
+      delete ret.fileKey;
+      return ret;
+    }
+  }
 });
 
 // Index for search

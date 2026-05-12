@@ -25,7 +25,7 @@ export const Reader: React.FC = () => {
 
   // Growth Strategy: Limit preview pages for non-premium/no-credit users
   const PREVIEW_LIMIT = 3;
-  const isLocked = !user || (user.credits <= 0 && user.role !== 'admin' && user._id !== doc?.author?._id);
+  const [isLocked, setIsLocked] = useState(false);
   const showBlur = isLocked && currentPage >= PREVIEW_LIMIT;
 
   const { user: authUser, token } = useAuth();
@@ -40,7 +40,15 @@ export const Reader: React.FC = () => {
 
     fetch(`${API_BASE_URL}/api/books/${id}`)
       .then(res => res.json())
-      .then(data => setDoc(data));
+      .then(data => {
+        console.log("RAW BOOK DATA FROM API:", data);
+        setDoc(data);
+        // Check lock status once doc and user are available
+        const isOwner = authUser && data.author && (authUser._id === data.author._id);
+        const isAdmin = authUser?.role === 'admin';
+        const hasCredits = authUser && authUser.credits > 0;
+        setIsLocked(!authUser || (!hasCredits && !isAdmin && !isOwner));
+      });
 
     // Fetch PDF as blob with Authorization header
     const fetchPdfBlob = async () => {
@@ -54,6 +62,7 @@ export const Reader: React.FC = () => {
         if (!response.ok) throw new Error('Failed to fetch PDF');
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
+        console.log("PDF LOADING URL (BLOB):", url);
         setPdfUrl(url);
       } catch (err) {
         console.error('Error fetching PDF blob:', err);
@@ -80,7 +89,7 @@ export const Reader: React.FC = () => {
       clearInterval(interval);
       if (pdfUrl) URL.revokeObjectURL(pdfUrl);
     };
-  }, [id, token]);
+  }, [id, token, authUser]);
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
@@ -156,9 +165,9 @@ export const Reader: React.FC = () => {
         
         {/* PDF Viewer Container */}
         <div className={`bg-charcoal rounded-2xl border border-white/5 overflow-hidden transition-all duration-500 shadow-2xl relative ${showBlur ? 'max-h-[80vh]' : ''}`}>
-          {doc.fileUrl ? (
+          {doc.fileType === 'pdf' ? (
             <div className="flex flex-col items-center py-8 min-h-[600px] relative">
-              {doc.fileUrl?.toLowerCase().endsWith('.pdf') ? (
+              {doc.fileType === 'pdf' ? (
                 <Document
                   file={pdfUrl}
                   onLoadSuccess={onDocumentLoadSuccess}

@@ -11,6 +11,7 @@ export interface Book {
   };
   coverImage?: string;
   fileUrl?: string;
+  fileType?: 'pdf' | 'other';
   content?: string;
   pageCount?: number;
   views: number;

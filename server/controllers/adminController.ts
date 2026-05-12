@@ -5,6 +5,15 @@ import { formatBookResponse } from '../utils/bookFormatter.js';
 import Revenue from '../models/Revenue';
 import Payout from '../models/Payout';
 
+// @desc    Get all books for admin
+// @route   GET /api/admin/documents
+// @access  Private/Admin
+export const getAdminBooks = async (req: Request, res: Response) => {
+  const books = await Book.find({}).populate('authorId', 'name email avatar credits').sort({ createdAt: -1 });
+  const formattedBooks = books.map(book => formatBookResponse(req, book));
+  res.json(formattedBooks);
+};
+
 // @desc    Get admin dashboard stats
 // @route   GET /api/admin/stats
 // @access  Private/Admin

@@ -395,7 +395,7 @@ export const Home: React.FC = () => {
                     </div>
                   )}
 
-                  {!selectedBook.content && selectedBook.fileUrl && (
+                  {selectedBook.fileType === 'pdf' && (
                     <div className="p-6 bg-void/50 rounded-2xl border border-white/5 flex items-center justify-between group cursor-pointer" onClick={() => setSelectedBook(null)}>
                       <Link to={`/reader/${selectedBook._id}`} className="flex items-center gap-4 w-full">
                         <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center">

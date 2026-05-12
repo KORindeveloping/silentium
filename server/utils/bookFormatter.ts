@@ -24,6 +24,7 @@ export const formatBookResponse = (req: Request, book: any) => {
     } : undefined,
     coverImage: getFullUrl(b.coverImage),
     fileUrl: `${baseUrl}/api/books/${b._id}/file`, // Guaranteed Proxy URL
+    fileType: b.fileUrl?.toLowerCase().endsWith('.pdf') || b.fileKey?.toLowerCase().endsWith('.pdf') ? 'pdf' : 'other',
     fileKey: b.fileKey, // Optional: useful for debugging but safe
     content: b.content,
     pageCount: b.pageCount,

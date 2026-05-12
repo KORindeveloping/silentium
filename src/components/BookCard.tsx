@@ -30,10 +30,9 @@ export const BookCard: React.FC<BookCardProps> = ({ book, isSkeleton, onQuickVie
     ? (book.coverImage.startsWith('http') ? book.coverImage : `${API_BASE_URL}/${book.coverImage.replace(/\\/g, '/')}`)
     : null;
 
-  const isPDF = book.fileUrl?.toLowerCase().endsWith('.pdf');
-  const normalizedFileUrl = book.fileUrl 
-    ? (book.fileUrl.startsWith('http') ? book.fileUrl : `${API_BASE_URL}/${book.fileUrl.replace(/\\/g, '/')}`)
-    : null;
+  const isPDF = book.fileType === 'pdf';
+  const isPDF = book.fileType === 'pdf';
+  const proxyFileUrl = `${API_BASE_URL}/api/books/${book._id}/file`;
 
   return (
     <motion.div

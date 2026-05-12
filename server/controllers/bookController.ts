@@ -114,7 +114,7 @@ export const createBook = async (req: Request, res: Response) => {
       });
     }
 
-    res.status(201).json(createdBook);
+    res.status(201).json(formatBookResponse(req, createdBook));
   } catch (error: any) {
     console.error('Upload error details:', {
       error: error?.message || error,
