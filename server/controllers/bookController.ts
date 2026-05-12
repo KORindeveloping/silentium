@@ -4,6 +4,7 @@ import fs from 'fs';
 import { Readable } from 'node:stream';
 import Book from '../models/Book';
 import User from '../models/User';
+import { formatBookResponse } from '../utils/bookFormatter.js';
 import { uploadToCloudinary } from '../utils/cloudinaryHelper';
 import { isCloudinaryConfigured } from '../config/cloudinary';
 import fetch from 'node-fetch';
@@ -321,39 +322,7 @@ export const getBooks = async (req: Request, res: Response) => {
     .limit(pageSize)
     .skip(pageSize * (page - 1));
 
-  const formattedBooks = books.map(book => {
-    const b = book as any;
-    const response = {
-      _id: b._id,
-      title: b.title,
-      description: b.description,
-      category: b.category,
-      tags: b.tags,
-      author: {
-        _id: b.authorId?._id,
-        name: b.authorId?.name || b.authorId?.email?.split('@')[0] || 'Unknown',
-        avatar: b.authorId?.avatar, 
-        credits: b.authorId?.credits
-      },
-      coverImage: b.coverImage,
-      fileUrl: `${API_BASE_URL}/api/books/${b._id}/file`,
-      fileKey: b.fileKey,
-      content: b.content,
-      pageCount: b.pageCount,
-      views: b.views,
-      likes: b.likes?.length || 0,
-      readingMinutes: b.readingMinutes,
-      status: b.status,
-      visibility: b.visibility,
-      createdAt: b.createdAt,
-    };
-    
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`[API] Returning book ${b._id}: fileUrl=${response.fileUrl}`);
-    }
-    
-    return response;
-  });
+  const formattedBooks = books.map(book => formatBookResponse(req, book));
 
   res.json({ books: formattedBooks, page, pages: Math.ceil(count / pageSize), total: count });
 };
@@ -368,40 +337,7 @@ export const getBookById = async (req: Request, res: Response) => {
     book.views += 1;
     await book.save();
 
-    const b = book as any;
-    const response = {
-      _id: b._id,
-      title: b.title,
-      description: b.description,
-      category: b.category,
-      tags: b.tags,
-      author: {
-        _id: b.authorId?._id,
-        name: b.authorId?.name || b.authorId?.email?.split('@')[0] || 'Unknown',
-        avatar: b.authorId?.avatar,
-        credits: b.authorId?.credits
-      },
-      coverImage: b.coverImage,
-      fileUrl: `${API_BASE_URL}/api/books/${b._id}/file`,
-      fileKey: b.fileKey,
-      content: b.content,
-      pageCount: b.pageCount,
-      views: b.views,
-      likes: b.likes?.length || 0,
-      isLiked: (req as any).user ? b.likes.includes((req as any).user._id) : false,
-      readingMinutes: b.readingMinutes,
-      status: b.status,
-      visibility: b.visibility,
-      createdAt: b.createdAt,
-    };
-
-    console.log(`[API] Detailed Book Response for ${b._id}:`, JSON.stringify({
-      id: response._id,
-      fileUrl: response.fileUrl,
-      hasFileKey: !!response.fileKey
-    }));
-
-    res.json(response);
+    res.json(formatBookResponse(req, book));
   } else {
     res.status(404).json({ message: 'Book not found' });
   }
@@ -425,7 +361,7 @@ export const updateBook = async (req: Request, res: Response) => {
     book.status = status || book.status;
 
     const updatedBook = await book.save();
-    res.json(updatedBook);
+    res.json(formatBookResponse(req, updatedBook));
   } else {
     res.status(404).json({ message: 'Book not found' });
   }

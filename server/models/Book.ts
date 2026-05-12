@@ -53,13 +53,13 @@ const BookSchema: Schema = new Schema({
     type: String,
   }],
   fileUrl: {
-    type: String, 
+    type: String, // LEGACY: Do not use for new features. Use proxy endpoint instead.
   },
   fileKey: {
-    type: String,
+    type: String, // Cloudinary Public ID or Local Path
   },
   storageType: {
-    type: String,
+    type: String, // 'cloudinary' or 'local'
     enum: ['cloudinary', 'local'],
   },
   coverImage: {

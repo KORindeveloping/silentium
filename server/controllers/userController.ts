@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import User from '../models/User';
 import Book from '../models/Book';
+import { formatBookResponse } from '../utils/bookFormatter.js';
 
 // @desc    Toggle Save Book
 // @route   PUT /api/users/library/:id
@@ -87,23 +88,13 @@ export const getUserLibrary = async (req: Request, res: Response) => {
       return `${baseUrl}/${relativePath.replace(/\\/g, '/').replace(/^\//, '')}`;
     };
 
-    const formatBook = (book: any) => ({
-      ...book._doc,
-      coverImage: getFullUrl(req, book.coverImage),
-      fileUrl: getFullUrl(req, book.fileUrl),
-      authorId: book.authorId ? {
-        ...book.authorId._doc,
-        avatar: getFullUrl(req, book.authorId.avatar)
-      } : undefined
-    });
-
     res.json({
-      saved: user.savedBooks.map((b: any) => formatBook(b)),
+      saved: user.savedBooks.map((b: any) => formatBookResponse(req, b)),
       history: user.history
         .filter((h: any) => h.bookId)
         .map((h: any) => ({
           ...h._doc,
-          bookId: formatBook(h.bookId)
+          bookId: formatBookResponse(req, h.bookId)
         }))
         .sort((a: any, b: any) => new Date(b.lastRead).getTime() - new Date(a.lastRead).getTime())
     });

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import Book from '../models/Book';
 import User from '../models/User';
+import { formatBookResponse } from '../utils/bookFormatter.js';
 import Revenue from '../models/Revenue';
 import Payout from '../models/Payout';
 
@@ -36,7 +37,7 @@ export const updateBookStatus = async (req: Request, res: Response) => {
   if (book) {
     book.status = status;
     await book.save();
-    res.json(book);
+    res.json(formatBookResponse(req, book));
   } else {
     res.status(404).json({ message: 'Book not found' });
   }
