@@ -192,45 +192,57 @@ export const streamBookFile = async (req: Request, res: Response) => {
       try {
         let targetUrl = fileUrl;
         
-        // If we have a fileKey, we can prefer generating a signed URL directly
         if (fileKey && isCloudinaryConfigured()) {
           const { v2: cloudinary } = await import('cloudinary');
+          
+          // First try: default 'raw' resource type (current upload behavior)
           targetUrl = cloudinary.url(fileKey, {
-            resource_type: 'raw', // Default for books/files
-            secure: true,
-            sign_url: true,
-            expires_at: Math.floor(Date.now() / 1000) + 3600
+            resource_type: 'raw',
+            secure: true
           });
           
-          // Double check: if the original URL had 'image/upload', we might need to adjust resource_type
-          if (fileUrl && fileUrl.includes('/image/upload/')) {
-            targetUrl = cloudinary.url(fileKey, {
-              resource_type: 'image',
-              secure: true,
-              sign_url: true,
-              expires_at: Math.floor(Date.now() / 1000) + 3600
-            });
+          let response = await fetch(targetUrl, {
+            headers: { 'User-Agent': 'Silentium-PDF-Proxy', 'Accept': 'application/pdf' },
+            redirect: 'follow'
+          });
+
+          // If 404, fallback to 'image' resource type (legacy PDF upload behavior)
+          if (response.status === 404) {
+             const fallbackUrl = cloudinary.url(fileKey, {
+               resource_type: 'image',
+               secure: true
+             });
+             response = await fetch(fallbackUrl, {
+               headers: { 'User-Agent': 'Silentium-PDF-Proxy', 'Accept': 'application/pdf' },
+               redirect: 'follow'
+             });
           }
-        }
 
-        if (!targetUrl) return res.status(404).json({ message: 'No file source found' });
+          if (!response.ok) {
+             return res.status(response.status).json({ message: 'Cloud storage rejected the request', status: response.status });
+          }
 
-        let response = await fetch(targetUrl, {
-          headers: { 'User-Agent': 'Silentium-PDF-Proxy', 'Accept': 'application/pdf' },
-          redirect: 'follow'
-        });
-
-        if (!response.ok) {
-           return res.status(response.status).json({ message: 'Cloud storage rejected the request' });
-        }
-
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `inline; filename="${fileName}.pdf"`);
-        
-        if (response.body) {
-          const readableStream = Readable.fromWeb(response.body as any);
-          readableStream.pipe(res);
-          res.on('close', () => readableStream.destroy());
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', `inline; filename="${fileName}.pdf"`);
+          
+          if (response.body) {
+            const readableStream = Readable.fromWeb(response.body as any);
+            readableStream.pipe(res);
+            res.on('close', () => readableStream.destroy());
+          }
+        } else if (targetUrl) {
+           // Fallback if cloudinary not configured but we have a url
+           const response = await fetch(targetUrl);
+           if (!response.ok) return res.status(response.status).json({ message: 'Failed to fetch from fallback URL' });
+           res.setHeader('Content-Type', 'application/pdf');
+           res.setHeader('Content-Disposition', `inline; filename="${fileName}.pdf"`);
+           if (response.body) {
+             const readableStream = Readable.fromWeb(response.body as any);
+             readableStream.pipe(res);
+             res.on('close', () => readableStream.destroy());
+           }
+        } else {
+           return res.status(404).json({ message: 'No file source found' });
         }
       } catch (error: any) {
         if (!res.headersSent) res.status(500).json({ message: 'Cloud stream error', error: error.message });
