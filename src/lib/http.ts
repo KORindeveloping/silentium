@@ -18,7 +18,18 @@ const toSnippet = (text: string) =>
     .slice(0, 160);
 
 export async function fetchJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
-  const res = await fetch(input, init);
+  const token = localStorage.getItem('token');
+  
+  const headers = new Headers(init?.headers);
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const res = await fetch(input, {
+    ...init,
+    headers,
+  });
+  
   const contentType = res.headers.get('content-type') || '';
   const raw = await res.text();
 
@@ -33,6 +44,13 @@ export async function fetchJson<T>(input: RequestInfo | URL, init?: RequestInit)
     } else {
       parsed = raw;
     }
+  }
+
+  if (res.status === 401) {
+    // Optional: Auto-logout on 401
+    // localStorage.removeItem('token');
+    // localStorage.removeItem('user');
+    // window.location.href = '/login';
   }
 
   if (!res.ok) {

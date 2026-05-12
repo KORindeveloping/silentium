@@ -11,34 +11,33 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
     console.error('Fatal: next is not a function in protect middleware');
     return res.status(500).json({ message: 'Internal Server Error (next is not a function)' });
   }
-  let token;
 
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-    try {
-      token = req.headers.authorization.split(' ')[1];
-      if (!token) {
-        return res.status(401).json({ message: 'Not authorized, token missing' });
-      }
-      const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'secret');
-      req.user = await User.findById(decoded.id).select('-passwordHash');
-      if (!req.user) {
-        return res.status(401).json({ message: 'Not authorized, user not found' });
-      }
-      return next();
-    } catch (error: any) {
-      console.error('JWT Error:', error.message);
-      if (error.name === 'JsonWebTokenError') {
-        return res.status(401).json({ message: 'Not authorized, invalid token' });
-      }
-      if (error.name === 'TokenExpiredError') {
-        return res.status(401).json({ message: 'Not authorized, token expired' });
-      }
-      return res.status(401).json({ message: 'Not authorized, token failed' });
-    }
-  }
+  const token = req.headers.authorization?.split(" ")[1];
 
   if (!token) {
-    return res.status(401).json({ message: 'Not authorized, no token' });
+    return res.status(401).json({
+      message: "Not authorized, no token"
+    });
+  }
+
+  try {
+    const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+    req.user = await User.findById(decoded.id).select('-passwordHash');
+    
+    if (!req.user) {
+      return res.status(401).json({ message: 'Not authorized, user not found' });
+    }
+    
+    return next();
+  } catch (error: any) {
+    console.error('JWT Error:', error.message);
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ message: 'Not authorized, invalid token' });
+    }
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Not authorized, token expired' });
+    }
+    return res.status(401).json({ message: 'Not authorized, token failed' });
   }
 };
 

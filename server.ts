@@ -76,9 +76,10 @@ if (isDev) {
 }
 
 app.use(cors({
-  origin: '*', // Allow all origins
+  origin: ["https://silentium.vercel.app", "http://localhost:5173", "http://localhost:3000"],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -153,7 +154,15 @@ app.use('/uploads', (req, res, next) => {
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   res.setHeader('Access-Control-Allow-Origin', '*');
   next();
-}, express.static(uploadsDir));
+}, (req, res, next) => {
+  // Custom handler for /uploads to return JSON 404 for missing files
+  const filePath = path.join(uploadsDir, req.path);
+  if (!fs.existsSync(filePath)) {
+    console.warn(`Local uploaded file not found: ${filePath}`);
+    return res.status(404).json({ message: 'File not found', path: req.path });
+  }
+  express.static(uploadsDir)(req, res, next);
+});
 
 // Note: New uploads are stored in Cloudinary, but local support is kept for legacy files and avatars
 
