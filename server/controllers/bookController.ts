@@ -48,6 +48,8 @@ export const createBook = async (req: Request, res: Response) => {
     }
 
     let fileUrl: string | undefined;
+    let fileKey: string | undefined;
+    let storageType: 'cloudinary' | 'local' | undefined;
     let coverImageUrl: string | undefined;
 
     // Upload File (PDF/Doc) - Always use Cloudinary for permanent storage
@@ -56,11 +58,11 @@ export const createBook = async (req: Request, res: Response) => {
       const fileSizeMB = file.size / (1024 * 1024);
 
       try {
-        // Always upload to Cloudinary for permanent storage
-        // Use 'raw' to avoid 401 errors with some Cloudinary PDF settings
         const result = await uploadToCloudinary(file.path, 'books/files', 'raw');
         fileUrl = result.secure_url;
-        console.log(`File (${fileSizeMB.toFixed(1)}MB) uploaded to Cloudinary: ${result.secure_url}`);
+        fileKey = result.public_id;
+        storageType = 'cloudinary';
+        console.log(`File (${fileSizeMB.toFixed(1)}MB) uploaded to Cloudinary. Key: ${fileKey}`);
 
         // Clean up temporary file
         if (fs.existsSync(file.path)) {
@@ -68,8 +70,7 @@ export const createBook = async (req: Request, res: Response) => {
         }
       } catch (error: any) {
         console.error('Cloudinary upload failed:', error);
-        const errorMsg = error?.message || (typeof error === 'string' ? error : JSON.stringify(error));
-        throw new Error(`Cloudinary upload failed: ${errorMsg || 'Unknown error'}`);
+        throw new Error(`Cloudinary upload failed: ${error?.message || 'Unknown error'}`);
       }
     }
 
@@ -85,8 +86,7 @@ export const createBook = async (req: Request, res: Response) => {
         }
       } catch (error: any) {
         console.error('Cloudinary cover image upload failed:', error);
-        const errorMsg = error?.message || (typeof error === 'string' ? error : JSON.stringify(error));
-        throw new Error(`Cloudinary cover image upload failed: ${errorMsg || 'Unknown error'}`);
+        throw new Error(`Cloudinary cover image upload failed: ${error?.message || 'Unknown error'}`);
       }
     }
 
@@ -97,6 +97,8 @@ export const createBook = async (req: Request, res: Response) => {
       category,
       tags: tags ? (typeof tags === 'string' ? tags.split(',').map((t: string) => t.trim()) : tags) : [],
       fileUrl,
+      fileKey,
+      storageType,
       coverImage: coverImageUrl,
       content,
       pageCount: pageCount || 0,
@@ -167,15 +169,17 @@ export const streamBookFile = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Invalid book id format' });
     }
 
-    const book = await Book.findById(bookId).lean<{ fileUrl?: string, title?: string }>();
-    const fileUrl = book?.fileUrl;
-    
-    if (!book || !fileUrl) {
-      return res.status(404).json({ message: 'Book has no downloadable file or does not exist' });
-    }
+    const book = await Book.findById(bookId).lean<any>();
+    if (!book) return res.status(404).json({ message: 'Book not found' });
 
-    const isCloudinary = fileUrl.includes('cloudinary');
-    const relativePath = extractUploadsRelative(fileUrl);
+    let storageType = book.storageType;
+    let fileKey = book.fileKey;
+    let fileUrl = book.fileUrl;
+
+    // Legacy Fallback
+    if (!storageType && fileUrl) {
+      storageType = fileUrl.includes('cloudinary') ? 'cloudinary' : 'local';
+    }
 
     // Standard Streaming Headers
     res.setHeader('Cache-Control', 'private, max-age=3600');
@@ -185,65 +189,58 @@ export const streamBookFile = async (req: Request, res: Response) => {
     
     const fileName = (book.title || 'document').replace(/[^a-z0-9]/gi, '_').toLowerCase();
 
-    if (isCloudinary) {
+    if (storageType === 'cloudinary') {
       try {
-        let response = await fetch(fileUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; Silentium-PDF-Viewer)',
-            'Accept': 'application/pdf,*/*'
-          },
-          redirect: 'follow'
-        });
+        let targetUrl = fileUrl;
         
-        // Fallback for private Cloudinary assets: try signed URL
-        if ((response.status === 401 || response.status === 403) && isCloudinaryConfigured()) {
-          const parts = fileUrl.split('/');
-          const uploadIdx = parts.indexOf('upload');
-          if (uploadIdx !== -1 && uploadIdx + 2 < parts.length) {
-             const publicIdWithExt = parts.slice(uploadIdx + 2).join('/');
-             const resourceTypeFromUrl = parts[uploadIdx - 1] as 'image' | 'raw' | 'video' | 'auto' || 'raw';
-             
-             const { v2: cloudinary } = await import('cloudinary');
-             const signedUrl = cloudinary.url(publicIdWithExt, {
-               resource_type: resourceTypeFromUrl,
-               secure: true,
-               sign_url: true,
-               expires_at: Math.floor(Date.now() / 1000) + 3600
-             });
-             
-             response = await fetch(signedUrl, {
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (compatible; Silentium-PDF-Viewer)',
-                'Accept': 'application/pdf,*/*'
-              },
-              redirect: 'follow'
-             });
+        // If we have a fileKey, we can prefer generating a signed URL directly
+        if (fileKey && isCloudinaryConfigured()) {
+          const { v2: cloudinary } = await import('cloudinary');
+          targetUrl = cloudinary.url(fileKey, {
+            resource_type: 'raw', // Default for books/files
+            secure: true,
+            sign_url: true,
+            expires_at: Math.floor(Date.now() / 1000) + 3600
+          });
+          
+          // Double check: if the original URL had 'image/upload', we might need to adjust resource_type
+          if (fileUrl && fileUrl.includes('/image/upload/')) {
+            targetUrl = cloudinary.url(fileKey, {
+              resource_type: 'image',
+              secure: true,
+              sign_url: true,
+              expires_at: Math.floor(Date.now() / 1000) + 3600
+            });
           }
         }
 
+        if (!targetUrl) return res.status(404).json({ message: 'No file source found' });
+
+        let response = await fetch(targetUrl, {
+          headers: { 'User-Agent': 'Silentium-PDF-Proxy', 'Accept': 'application/pdf' },
+          redirect: 'follow'
+        });
+
         if (!response.ok) {
-          return res.status(response.status).json({ 
-            message: `Cloud storage error: ${response.statusText}`,
-            targetUrl: fileUrl
-          });
+           return res.status(response.status).json({ message: 'Cloud storage rejected the request' });
         }
-        
+
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `inline; filename="${fileName}.pdf"`);
         
         if (response.body) {
           const readableStream = Readable.fromWeb(response.body as any);
           readableStream.pipe(res);
-          readableStream.on('error', (err) => {
-            if (!res.headersSent) res.status(500).end();
-            else res.end();
-          });
           res.on('close', () => readableStream.destroy());
         }
       } catch (error: any) {
         if (!res.headersSent) res.status(500).json({ message: 'Cloud stream error', error: error.message });
       }
-    } else if (relativePath) {
+    } else {
+      // Local Storage Logic
+      const relativePath = fileKey || extractUploadsRelative(fileUrl || '');
+      if (!relativePath) return res.status(404).json({ message: 'File not found' });
+
       const localPath = path.join(uploadsDirRoot(), relativePath);
       if (fs.existsSync(localPath)) {
         const stat = fs.statSync(localPath);
@@ -259,7 +256,6 @@ export const streamBookFile = async (req: Request, res: Response) => {
           
           res.writeHead(206, {
             'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-            'Accept-Ranges': 'bytes',
             'Content-Length': chunksize,
             'Content-Type': 'application/pdf',
             'Content-Disposition': `inline; filename="${fileName}.pdf"`,
@@ -276,8 +272,6 @@ export const streamBookFile = async (req: Request, res: Response) => {
       } else {
         res.status(404).json({ message: 'Local file not found' });
       }
-    } else {
-      res.status(500).json({ message: 'File URL configuration error' });
     }
   } catch (globalError: any) {
     if (!res.headersSent) res.status(500).json({ message: 'Proxy fatal error', error: globalError.message });
@@ -344,7 +338,7 @@ export const getBooks = async (req: Request, res: Response) => {
         credits: b.authorId?.credits
       },
       coverImage: b.coverImage, // Already full URL
-      fileUrl: b.fileUrl,       // Already full URL
+      fileUrl: b.fileUrl ? `${API_BASE_URL}/api/books/${b._id}/file` : null,
       content: b.content,
       pageCount: b.pageCount,
       views: b.views,
@@ -383,7 +377,7 @@ export const getBookById = async (req: Request, res: Response) => {
         credits: b.authorId?.credits
       },
       coverImage: b.coverImage,
-      fileUrl: b.fileUrl,
+      fileUrl: b.fileUrl ? `${API_BASE_URL}/api/books/${b._id}/file` : null,
       content: b.content,
       pageCount: b.pageCount,
       views: b.views,

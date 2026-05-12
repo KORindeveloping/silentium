@@ -6,14 +6,16 @@ export interface IBook extends Document {
   description: string;
   category: string;
   tags: string[];
-  fileUrl?: string; // Optional if content is provided
-  coverImage?: string; // Changed from coverUrl to match frontend requirements
-  content?: string; // For directly written stories
-  textSnippet?: string; // For SEO and blurred previews
+  fileUrl?: string; // Kept for legacy/compatibility
+  fileKey?: string; // New: Cloudinary public ID or local path
+  storageType?: 'cloudinary' | 'local'; // New
+  coverImage?: string;
+  content?: string;
+  textSnippet?: string;
   pageCount?: number;
   views: number;
   readingMinutes: number;
-  likes: mongoose.Schema.Types.ObjectId[]; // Array of user IDs who liked
+  likes: mongoose.Schema.Types.ObjectId[];
   status: 'pending' | 'approved' | 'rejected' | 'draft' | 'archived' | 'published';
   visibility: 'public' | 'private';
   createdAt: Date;
@@ -51,7 +53,14 @@ const BookSchema: Schema = new Schema({
     type: String,
   }],
   fileUrl: {
-    type: String, // Can be optional now
+    type: String, 
+  },
+  fileKey: {
+    type: String,
+  },
+  storageType: {
+    type: String,
+    enum: ['cloudinary', 'local'],
   },
   coverImage: {
     type: String,
