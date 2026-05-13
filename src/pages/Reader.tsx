@@ -81,7 +81,9 @@ export const Reader: React.FC = () => {
             'Authorization': `Bearer ${currentToken}` 
           },
           body: JSON.stringify({ bookId: id, minutes: 0.5 })
-        }).catch(() => {});
+        }).catch((err) => {
+          console.warn('Analytics tracking failed:', err);
+        });
       }
     }, 30000);
 
