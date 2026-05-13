@@ -38,27 +38,5 @@ const upload = multer({
   }
 });
 
-// Function to upload a file from a local path to Cloudinary
-export const uploadToCloudinary = async (filePath: string, folder: string, resourceType: 'raw' | 'image' = 'raw'): Promise<any> => {
-  try {
-    const result = await cloudinary.uploader.upload(filePath, {
-      folder: folder,
-      resource_type: resourceType,
-      use_filename: true,
-      unique_filename: true,
-      overwrite: true
-    });
-    // Clean up the temporary file after upload
-    fs.unlinkSync(filePath);
-    return result;
-  } catch (error: any) {
-    console.error('Cloudinary upload error:', error);
-    // Attempt to clean up temp file even if upload fails
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-    throw new Error(`Cloudinary upload failed: ${error?.message || 'Unknown error'}`);
-  }
-};
-
 export default upload;
+

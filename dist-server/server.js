@@ -1,11 +1,11 @@
 // server.ts
-import dotenv2 from "dotenv";
+import dotenv from "dotenv";
 import express9 from "express";
 import { createServer as createViteServer } from "vite";
-import path3 from "path";
+import path4 from "path";
 import cors from "cors";
 import helmet from "helmet";
-import fs3 from "fs";
+import fs4 from "fs";
 import { fileURLToPath } from "url";
 
 // server/config/db.ts
@@ -84,6 +84,18 @@ var UserSchema = new Schema({
     default: "reader"
   },
   credits: {
+    type: Number,
+    default: 0
+  },
+  streak: {
+    type: Number,
+    default: 1
+  },
+  longestStreak: {
+    type: Number,
+    default: 0
+  },
+  lastLostStreak: {
     type: Number,
     default: 0
   },
@@ -281,13 +293,38 @@ var loginUser = async (req, res, next) => {
     if (await user.matchPassword(password)) {
       user.loginAttempts = 0;
       user.lockUntil = void 0;
-      user.lastLogin = /* @__PURE__ */ new Date();
+      const now = /* @__PURE__ */ new Date();
+      const lastLogin = user.lastLogin;
+      if (lastLogin) {
+        const lastLoginDate = new Date(lastLogin);
+        const isToday = now.toDateString() === lastLoginDate.toDateString();
+        if (!isToday) {
+          const yesterday = new Date(now);
+          yesterday.setDate(now.getDate() - 1);
+          const isYesterday = yesterday.toDateString() === lastLoginDate.toDateString();
+          if (isYesterday) {
+            user.streak += 1;
+          } else {
+            if (user.streak > 1) {
+              user.lastLostStreak = user.streak;
+            }
+            user.streak = 1;
+          }
+          if (user.streak > user.longestStreak) {
+            user.longestStreak = user.streak;
+          }
+        }
+      }
+      user.lastLogin = now;
       await user.save();
       await LoginLog_default.create({ userId: user._id, email, status: "success", ipAddress, userAgent });
       res.json({
         _id: user._id,
         email: user.email,
         role: user.role,
+        streak: user.streak,
+        longestStreak: user.longestStreak,
+        lastLostStreak: user.lastLostStreak,
         token: generateToken(user._id.toString(), rememberMe)
       });
     } else {
@@ -333,6 +370,9 @@ var getUserProfile = async (req, res, next) => {
         location: user.location,
         avatar: getFullUrl(req, user.avatar),
         notificationPreferences: user.notificationPreferences,
+        streak: user.streak,
+        longestStreak: user.longestStreak,
+        lastLostStreak: user.lastLostStreak,
         createdAt: user.createdAt
       });
     } else {
@@ -419,33 +459,41 @@ var protect = async (req, res, next) => {
     console.error("Fatal: next is not a function in protect middleware");
     return res.status(500).json({ message: "Internal Server Error (next is not a function)" });
   }
-  let token;
-  if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) {
+    return res.status(401).json({
+      message: "Not authorized, no token"
+    });
+  }
+  try {
+    const decoded = jwt2.verify(token, process.env.JWT_SECRET || "secret");
+    req.user = await User_default.findById(decoded.id).select("-passwordHash");
+    if (!req.user) {
+      return res.status(401).json({ message: "Not authorized, user not found" });
+    }
+    return next();
+  } catch (error) {
+    console.error("JWT Error:", error.message);
+    if (error.name === "JsonWebTokenError") {
+      return res.status(401).json({ message: "Not authorized, invalid token" });
+    }
+    if (error.name === "TokenExpiredError") {
+      return res.status(401).json({ message: "Not authorized, token expired" });
+    }
+    return res.status(401).json({ message: "Not authorized, token failed" });
+  }
+};
+var optionalProtect = async (req, res, next) => {
+  const token = req.headers.authorization?.split(" ")[1] || req.query.token;
+  if (token) {
     try {
-      token = req.headers.authorization.split(" ")[1];
-      if (!token) {
-        return res.status(401).json({ message: "Not authorized, token missing" });
-      }
       const decoded = jwt2.verify(token, process.env.JWT_SECRET || "secret");
       req.user = await User_default.findById(decoded.id).select("-passwordHash");
-      if (!req.user) {
-        return res.status(401).json({ message: "Not authorized, user not found" });
-      }
-      return next();
-    } catch (error) {
-      console.error("JWT Error:", error.message);
-      if (error.name === "JsonWebTokenError") {
-        return res.status(401).json({ message: "Not authorized, invalid token" });
-      }
-      if (error.name === "TokenExpiredError") {
-        return res.status(401).json({ message: "Not authorized, token expired" });
-      }
-      return res.status(401).json({ message: "Not authorized, token failed" });
+    } catch {
+      console.warn("Invalid token provided (header or query):", token);
     }
   }
-  if (!token) {
-    return res.status(401).json({ message: "Not authorized, no token" });
-  }
+  return next();
 };
 var admin = (req, res, next) => {
   if (typeof next !== "function") return res.status(500).json({ message: "next is not a function" });
@@ -468,37 +516,31 @@ var author = (req, res, next) => {
 import multer from "multer";
 import path2 from "path";
 import fs from "fs";
-var uploadsDir = process.env.UPLOADS_PATH || path2.join(process.cwd(), "uploads");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
+var tempDir = "temp_uploads";
+if (!fs.existsSync(tempDir)) {
+  fs.mkdirSync(tempDir);
 }
 var storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
+  destination: function(req, file, cb) {
+    cb(null, tempDir);
   },
-  filename: (req, file, cb) => {
+  filename: function(req, file, cb) {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, `${file.fieldname}-${uniqueSuffix}${path2.extname(file.originalname)}`);
+    cb(null, file.fieldname + "-" + uniqueSuffix + path2.extname(file.originalname));
   }
 });
-function checkFileType(file, cb) {
-  const filetypes = /pdf|doc|docx|epub|jpg|jpeg|png|webp/;
-  const extname = filetypes.test(path2.extname(file.originalname).toLowerCase());
-  const mimetype = filetypes.test(file.mimetype);
-  if (extname && mimetype) {
-    return cb(null, true);
-  } else {
-    cb(new Error("Invalid file type. Only PDFs, Documents, and Images are allowed."));
-  }
-}
 var upload = multer({
   storage,
-  fileFilter: (req, file, cb) => {
-    checkFileType(file, cb);
-  },
-  limits: {
-    fileSize: 10 * 1024 * 1024
-    // 10MB limit for book documents (aligned with Cloudinary free tier)
+  limits: { fileSize: 50 * 1024 * 1024 },
+  // 50MB limit
+  fileFilter: function(req, file, cb) {
+    if (file.fieldname === "file" && file.mimetype !== "application/pdf") {
+      return cb(new Error("Only PDF files are allowed for the book file."));
+    }
+    if (file.fieldname === "coverImage" && !file.mimetype.startsWith("image/")) {
+      return cb(new Error("Only image files are allowed for the cover image."));
+    }
+    cb(null, true);
   }
 });
 var uploadMiddleware_default = upload;
@@ -524,7 +566,8 @@ var authRoutes_default = router;
 import express2 from "express";
 
 // server/controllers/bookController.ts
-import fs2 from "fs";
+import path3 from "path";
+import fs3 from "fs";
 
 // server/models/Book.ts
 import mongoose5, { Schema as Schema4 } from "mongoose";
@@ -560,7 +603,16 @@ var BookSchema = new Schema4({
   }],
   fileUrl: {
     type: String
-    // Can be optional now
+    // LEGACY: Do not use for new features. Use proxy endpoint instead.
+  },
+  fileKey: {
+    type: String
+    // Cloudinary Public ID or Local Path
+  },
+  storageType: {
+    type: String,
+    // 'cloudinary' or 'local'
+    enum: ["cloudinary", "local"]
   },
   coverImage: {
     type: String,
@@ -594,85 +646,132 @@ var BookSchema = new Schema4({
     ref: "User"
   }]
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: {
+    transform: (doc, ret) => {
+      delete ret.fileUrl;
+      delete ret.fileKey;
+      return ret;
+    }
+  },
+  toObject: {
+    transform: (doc, ret) => {
+      delete ret.fileUrl;
+      delete ret.fileKey;
+      return ret;
+    }
+  }
 });
 BookSchema.index({ title: "text", description: "text", tags: "text" });
 var Book = mongoose5.models.Book || mongoose5.model("Book", BookSchema);
 var Book_default = Book;
 
-// server/utils/cloudinaryHelper.ts
-import { v2 as cloudinary } from "cloudinary";
-var uploadToCloudinary = (filePath, folder) => {
-  return new Promise((resolve, reject) => {
-    cloudinary.uploader.upload(
-      filePath,
-      { folder, resource_type: "auto" },
-      (error, result) => {
-        if (result) resolve(result);
-        else reject(error);
-      }
-    );
-  });
+// server/utils/bookFormatter.ts
+var formatBookResponse = (req, book) => {
+  const b = book._doc || book;
+  const protocol = process.env.NODE_ENV === "production" ? "https" : req.protocol;
+  const baseUrl = `${protocol}://${req.get("host")}`;
+  const getFullUrl2 = (relativePath) => {
+    if (!relativePath) return void 0;
+    if (relativePath.startsWith("http://")) {
+      return relativePath.replace("http://", "https://");
+    }
+    if (relativePath.startsWith("https://")) return relativePath;
+    return `${baseUrl}/${relativePath.replace(/\\/g, "/").replace(/^\//, "")}`;
+  };
+  return {
+    _id: b._id,
+    title: b.title,
+    description: b.description,
+    category: b.category,
+    tags: b.tags,
+    author: b.authorId ? {
+      _id: b.authorId._id || b.authorId,
+      name: b.authorId.name || b.authorId.email?.split("@")[0] || "Unknown",
+      avatar: getFullUrl2(b.authorId.avatar),
+      credits: b.authorId.credits
+    } : void 0,
+    coverImage: getFullUrl2(b.coverImage),
+    // Proxy URL only — never expose raw storage URLs
+    fileUrl: `${baseUrl}/api/books/${b._id}/file`,
+    fileType: b.fileUrl?.toLowerCase().endsWith(".pdf") || b.fileKey?.toLowerCase().endsWith(".pdf") ? "pdf" : "other",
+    // fileKey intentionally omitted — internal storage detail, never expose to client
+    content: b.content,
+    pageCount: b.pageCount,
+    views: b.views,
+    likes: b.likes?.length || 0,
+    isLiked: req.user ? b.likes?.includes(req.user._id) : false,
+    readingMinutes: b.readingMinutes,
+    status: b.status,
+    visibility: b.visibility,
+    createdAt: b.createdAt
+  };
 };
 
-// server/config/cloudinary.ts
-import { v2 as cloudinary2 } from "cloudinary";
-import dotenv from "dotenv";
-dotenv.config();
-cloudinary2.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
-var isCloudinaryConfigured = () => Boolean(
-  process.env.CLOUDINARY_CLOUD_NAME?.trim() && process.env.CLOUDINARY_API_KEY?.trim() && process.env.CLOUDINARY_API_SECRET?.trim()
-);
+// server/utils/cloudinaryHelper.ts
+import { v2 as cloudinary } from "cloudinary";
+import fs2 from "fs";
+var uploadToCloudinary = async (filePath, folder, resourceType = "auto") => {
+  try {
+    const result = await cloudinary.uploader.upload(filePath, {
+      folder,
+      resource_type: resourceType,
+      use_filename: true,
+      unique_filename: true,
+      overwrite: true,
+      access_mode: "public"
+    });
+    console.log(`[Cloudinary] Upload success: ${result.secure_url} (${result.resource_type})`);
+    if (fs2.existsSync(filePath)) {
+      fs2.unlinkSync(filePath);
+    }
+    return result;
+  } catch (error) {
+    console.error("[Cloudinary] Upload error:", error);
+    if (fs2.existsSync(filePath)) {
+      fs2.unlinkSync(filePath);
+    }
+    throw new Error(`Cloudinary upload failed: ${error.message || "Unknown error"}`);
+  }
+};
+var getCloudinaryUrl = (publicId, resourceType = "raw") => {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  if (!cloudName) {
+    throw new Error("CLOUDINARY_CLOUD_NAME not configured");
+  }
+  return `https://res.cloudinary.com/${cloudName}/${resourceType}/upload/${publicId}`;
+};
 
 // server/controllers/bookController.ts
+import fetch from "node-fetch";
+var uploadsDirRoot = () => process.env.UPLOADS_PATH || path3.join(process.cwd(), "uploads");
+var extractUploadsRelative = (raw) => {
+  const normalized = raw.replace(/\\/g, "/").trim();
+  const idx = normalized.toLowerCase().indexOf("/uploads/");
+  if (idx >= 0) return normalized.slice(idx + "/uploads/".length);
+  if (/^uploads\//i.test(normalized)) return normalized.slice("uploads/".length);
+  if (/^\/uploads\//i.test(normalized)) return normalized.slice("/uploads/".length);
+  return null;
+};
 var createBook = async (req, res) => {
   try {
     const { title, description, category, tags, visibility, content, readingMinutes, pageCount } = req.body;
     const files = req.files;
-    if (!files?.["file"] && !content) {
-      return res.status(400).json({ message: "Please provide either a file or write content." });
-    }
-    const needsCloudinaryUpload = !!(files?.["file"]?.[0] || files?.["coverImage"]?.[0]);
-    if (needsCloudinaryUpload && !isCloudinaryConfigured()) {
-      return res.status(503).json({
-        message: "Cloudinary is not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in the server environment (e.g. Render dashboard).",
-        code: "CLOUDINARY_NOT_CONFIGURED"
-      });
-    }
-    let fileUrl;
+    let fileKey;
     let coverImageUrl;
+    const storageType = "cloudinary";
     if (files?.["file"]?.[0]) {
       const file = files["file"][0];
-      const fileSizeMB = file.size / (1024 * 1024);
-      try {
-        const result = await uploadToCloudinary(file.path, "books/files");
-        fileUrl = result.secure_url;
-        console.log(`File (${fileSizeMB.toFixed(1)}MB) uploaded to Cloudinary: ${result.secure_url}`);
-        if (fs2.existsSync(file.path)) {
-          fs2.unlinkSync(file.path);
-        }
-      } catch (error) {
-        console.error("Cloudinary upload failed:", error);
-        const errorMsg = error?.message || (typeof error === "string" ? error : JSON.stringify(error));
-        throw new Error(`Cloudinary upload failed: ${errorMsg || "Unknown error"}`);
-      }
+      const result = await uploadToCloudinary(file.path, "books/files", "raw");
+      fileKey = result.public_id;
     }
     if (files?.["coverImage"]?.[0]) {
-      try {
-        const result = await uploadToCloudinary(files["coverImage"][0].path, "books/covers");
-        coverImageUrl = result.secure_url;
-        if (fs2.existsSync(files["coverImage"][0].path)) {
-          fs2.unlinkSync(files["coverImage"][0].path);
-        }
-      } catch (error) {
-        console.error("Cloudinary cover image upload failed:", error);
-        const errorMsg = error?.message || (typeof error === "string" ? error : JSON.stringify(error));
-        throw new Error(`Cloudinary cover image upload failed: ${errorMsg || "Unknown error"}`);
-      }
+      const file = files["coverImage"][0];
+      const result = await uploadToCloudinary(file.path, "books/covers", "image");
+      coverImageUrl = result.secure_url;
+    }
+    if (!fileKey && !content) {
+      return res.status(400).json({ message: "Please provide either a file or write content." });
     }
     const book = new Book_default({
       title,
@@ -680,7 +779,8 @@ var createBook = async (req, res) => {
       description,
       category,
       tags: tags ? typeof tags === "string" ? tags.split(",").map((t) => t.trim()) : tags : [],
-      fileUrl,
+      fileKey,
+      storageType,
       coverImage: coverImageUrl,
       content,
       pageCount: pageCount || 0,
@@ -689,53 +789,136 @@ var createBook = async (req, res) => {
       readingMinutes: readingMinutes || 5
     });
     const createdBook = await book.save();
-    if (fileUrl || content) {
+    if (fileKey || content) {
       await User_default.findByIdAndUpdate(req.user._id, {
         $inc: { credits: 3 }
       });
     }
-    res.status(201).json(createdBook);
+    res.status(201).json(formatBookResponse(req, createdBook));
   } catch (error) {
-    console.error("Upload error details:", error);
-    const msg = typeof error?.message === "string" ? error.message : "Upload failed";
-    if (msg.includes("File size too large") || msg.includes("file size") || msg.includes("LIMIT_FILE_SIZE")) {
-      return res.status(413).json({
-        message: "File size too large. Maximum file size is 50MB for book documents.",
-        code: "FILE_TOO_LARGE"
-      });
-    }
-    if (/must supply api_key/i.test(msg)) {
-      return res.status(503).json({
-        message: "Cloudinary rejected the upload (missing credentials). Confirm CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET are set correctly on Render.",
-        code: "CLOUDINARY_MISSING_API_KEY"
-      });
-    }
-    if (error?.name === "Error" && error?.http_code) {
-      return res.status(error.http_code).json({
-        message: `Cloudinary error: ${msg}`,
-        code: "CLOUDINARY_ERROR",
-        details: error
-      });
-    }
-    res.status(400).json({
-      message: msg,
-      code: "UPLOAD_ERROR",
-      details: error
+    console.error("Upload error details:", {
+      error: error?.message || error,
+      stack: error?.stack,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
     });
+    res.status(500).json({ message: "Book creation failed", error: error.message });
   }
 };
 var streamBookFile = async (req, res) => {
-  if (!/^[a-fA-F0-9]{24}$/.test(req.params.id)) {
-    res.status(400).json({ message: "Invalid book id" });
-    return;
+  const bookId = req.params.id;
+  try {
+    if (!/^[a-fA-F0-9]{24}$/.test(bookId)) {
+      return res.status(400).json({ message: "Invalid book id format" });
+    }
+    console.log(`[DEBUG] Looking for book with ID: ${bookId}`);
+    console.log(`[DEBUG] ID format valid:`, /^[a-fA-F0-9]{24}$/.test(bookId));
+    const book = await Book_default.findById(bookId).select("+fileUrl +fileKey title visibility storageType").lean();
+    console.log(`[DEBUG] Book found:`, !!book);
+    if (book) {
+      console.log(`[DEBUG] Book data:`, {
+        fileUrl: !!book.fileUrl,
+        fileKey: !!book.fileKey,
+        storageType: book.storageType,
+        title: book.title
+      });
+    } else {
+      console.log(`[DEBUG] Book not found in database`);
+    }
+    if (!book) {
+      console.log(`[DEBUG] Book not found in database`);
+      return res.status(404).json({ message: "Book not found" });
+    }
+    if (!book.fileUrl && !book.fileKey) {
+      console.log(`[DEBUG] Book has no file information - fileUrl: ${!!book?.fileUrl}, fileKey: ${!!book?.fileKey}`);
+      return res.status(404).json({ message: "Book has no file" });
+    }
+    let fileUrl = book.fileUrl;
+    const isCloudinary = book.storageType === "cloudinary" || fileUrl && fileUrl.includes("res.cloudinary.com");
+    if (!fileUrl && book.fileKey && book.storageType) {
+      if (book.storageType === "cloudinary") {
+        fileUrl = getCloudinaryUrl(book.fileKey, "raw");
+      }
+    }
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Range, Content-Type, Authorization");
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    const fileName = (book.title || "document").replace(/[^a-z0-9]/gi, "_").toLowerCase();
+    res.setHeader("Content-Disposition", `inline; filename="${fileName}.pdf"`);
+    if (isCloudinary) {
+      try {
+        console.log(`Proxying Cloudinary file: ${fileUrl}`);
+        const rawUrl = fileUrl.replace(/\/upload\//, "/upload/fl_attachment/").replace(/\.[^.]+$/, "");
+        const response = await fetch(rawUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; Silentium-PDF-Viewer)",
+            "Accept": "application/pdf,*/*"
+          }
+        });
+        if (!response.ok) {
+          console.error(`Cloudinary fetch failed: ${response.status} ${response.statusText}`);
+          return res.status(response.status).json({
+            message: `Failed to fetch file from cloud storage (${response.status})`,
+            url: rawUrl,
+            error: response.statusText
+          });
+        }
+        if (response.body) {
+          res.status(response.status);
+          response.body.pipe(res);
+        } else {
+          res.status(500).json({ message: "Cloud storage response has no body" });
+        }
+      } catch (error) {
+        console.error("Proxy Error (Cloudinary):", error);
+        if (!res.headersSent) {
+          res.status(500).json({
+            message: "Error streaming from cloud storage",
+            error: error.message
+          });
+        }
+      }
+    } else {
+      const relativePath = extractUploadsRelative(fileUrl || "");
+      if (relativePath) {
+        const localPath = path3.join(uploadsDirRoot(), relativePath);
+        if (fs3.existsSync(localPath)) {
+          const stat = fs3.statSync(localPath);
+          const fileSize = stat.size;
+          const range = req.headers.range;
+          if (range) {
+            const parts = range.replace(/bytes=/, "").split("-");
+            const start = parseInt(parts[0], 10);
+            const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+            const chunksize = end - start + 1;
+            const file = fs3.createReadStream(localPath, { start, end });
+            res.writeHead(206, {
+              "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+              "Content-Length": chunksize,
+              "Content-Type": "application/pdf",
+              "Content-Disposition": `inline; filename="${fileName}.pdf"`
+            });
+            file.pipe(res);
+          } else {
+            res.writeHead(200, {
+              "Content-Length": fileSize,
+              "Content-Type": "application/pdf",
+              "Content-Disposition": `inline; filename="${fileName}.pdf"`
+            });
+            fs3.createReadStream(localPath).pipe(res);
+          }
+        } else {
+          console.log(`Fallback redirect to: ${fileUrl}`);
+          res.redirect(302, fileUrl);
+        }
+      }
+    }
+  } catch (globalError) {
+    if (!res.headersSent) res.status(500).json({ message: "Proxy fatal error", error: globalError.message });
   }
-  const book = await Book_default.findById(req.params.id).lean();
-  const fileUrl = book?.fileUrl;
-  if (!book || !fileUrl) {
-    res.status(404).json({ message: "Book has no downloadable file" });
-    return;
-  }
-  res.redirect(302, fileUrl);
 };
 var getBooks = async (req, res) => {
   const pageSize = Number(req.query.limit) || 12;
@@ -771,35 +954,7 @@ var getBooks = async (req, res) => {
   else if (sortBy === "trending") sortOptions = { views: -1, createdAt: -1 };
   const count = await Book_default.countDocuments(query);
   const books = await Book_default.find(query).populate("authorId", "name email avatar credits").sort(sortOptions).limit(pageSize).skip(pageSize * (page - 1));
-  const formattedBooks = books.map((book) => {
-    const b = book;
-    return {
-      _id: b._id,
-      title: b.title,
-      description: b.description,
-      category: b.category,
-      tags: b.tags,
-      author: {
-        _id: b.authorId?._id,
-        name: b.authorId?.name || b.authorId?.email?.split("@")[0] || "Unknown",
-        avatar: b.authorId?.avatar,
-        // Already full URL
-        credits: b.authorId?.credits
-      },
-      coverImage: b.coverImage,
-      // Already full URL
-      fileUrl: b.fileUrl,
-      // Already full URL
-      content: b.content,
-      pageCount: b.pageCount,
-      views: b.views,
-      likes: b.likes?.length || 0,
-      readingMinutes: b.readingMinutes,
-      status: b.status,
-      visibility: b.visibility,
-      createdAt: b.createdAt
-    };
-  });
+  const formattedBooks = books.map((book) => formatBookResponse(req, book));
   res.json({ books: formattedBooks, page, pages: Math.ceil(count / pageSize), total: count });
 };
 var getBookById = async (req, res) => {
@@ -807,31 +962,7 @@ var getBookById = async (req, res) => {
   if (book) {
     book.views += 1;
     await book.save();
-    const b = book;
-    res.json({
-      _id: b._id,
-      title: b.title,
-      description: b.description,
-      category: b.category,
-      tags: b.tags,
-      author: {
-        _id: b.authorId?._id,
-        name: b.authorId?.name || b.authorId?.email?.split("@")[0] || "Unknown",
-        avatar: b.authorId?.avatar,
-        credits: b.authorId?.credits
-      },
-      coverImage: b.coverImage,
-      fileUrl: b.fileUrl,
-      content: b.content,
-      pageCount: b.pageCount,
-      views: b.views,
-      likes: b.likes?.length || 0,
-      isLiked: req.user ? b.likes.includes(req.user._id) : false,
-      readingMinutes: b.readingMinutes,
-      status: b.status,
-      visibility: b.visibility,
-      createdAt: b.createdAt
-    });
+    res.json(formatBookResponse(req, book));
   } else {
     res.status(404).json({ message: "Book not found" });
   }
@@ -851,7 +982,7 @@ var updateBook = async (req, res) => {
     book.visibility = visibility || book.visibility;
     book.status = status || book.status;
     const updatedBook = await book.save();
-    res.json(updatedBook);
+    res.json(formatBookResponse(req, updatedBook));
   } else {
     res.status(404).json({ message: "Book not found" });
   }
@@ -902,8 +1033,13 @@ var asyncHandler = (fn) => (req, res, next) => {
 
 // server/routes/bookRoutes.ts
 var router2 = express2.Router();
-router2.get("/:id/file", asyncHandler(streamBookFile));
-router2.route("/").get(asyncHandler(getBooks)).post(protect, author, uploadMiddleware_default.fields([{ name: "file", maxCount: 1 }, { name: "coverImage", maxCount: 1 }]), asyncHandler(createBook));
+router2.get("/:id/file", optionalProtect, asyncHandler(streamBookFile));
+router2.route("/").get(asyncHandler(getBooks)).post(
+  protect,
+  author,
+  uploadMiddleware_default.fields([{ name: "file", maxCount: 1 }, { name: "coverImage", maxCount: 1 }]),
+  asyncHandler(createBook)
+);
 router2.route("/:id").get(asyncHandler(getBookById)).put(protect, author, asyncHandler(updateBook)).delete(protect, author, asyncHandler(deleteBook));
 router2.route("/:id/like").put(protect, asyncHandler(toggleLike));
 var bookRoutes_default = router2;
@@ -1110,6 +1246,11 @@ var Revenue = mongoose8.models.Revenue || mongoose8.model("Revenue", RevenueSche
 var Revenue_default = Revenue;
 
 // server/controllers/adminController.ts
+var getAdminBooks = async (req, res) => {
+  const books = await Book_default.find({}).populate("authorId", "name email avatar credits").sort({ createdAt: -1 });
+  const formattedBooks = books.map((book) => formatBookResponse(req, book));
+  res.json(formattedBooks);
+};
 var getAdminStats = async (req, res) => {
   const totalUsers = await User_default.countDocuments();
   const totalBooks = await Book_default.countDocuments();
@@ -1131,7 +1272,7 @@ var updateBookStatus = async (req, res) => {
   if (book) {
     book.status = status;
     await book.save();
-    res.json(book);
+    res.json(formatBookResponse(req, book));
   } else {
     res.status(404).json({ message: "Book not found" });
   }
@@ -1144,6 +1285,8 @@ var getPayouts = async (req, res) => {
 // server/routes/adminRoutes.ts
 var router4 = express4.Router();
 router4.get("/stats", protect, admin, getAdminStats);
+router4.get("/documents", protect, admin, getAdminBooks);
+router4.patch("/documents/:id/status", protect, admin, updateBookStatus);
 router4.patch("/books/:id/status", protect, admin, updateBookStatus);
 router4.get("/payouts", protect, admin, getPayouts);
 var adminRoutes_default = router4;
@@ -1163,6 +1306,8 @@ var createCheckoutSession = async (req, res) => {
     return;
   }
   try {
+    const rawAppUrl = process.env.APP_URL || "http://localhost:3000";
+    const appUrl = process.env.NODE_ENV === "production" && rawAppUrl.startsWith("http://") ? rawAppUrl.replace("http://", "https://") : rawAppUrl;
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       line_items: [{
@@ -1176,8 +1321,8 @@ var createCheckoutSession = async (req, res) => {
         quantity: 1
       }],
       mode: "subscription",
-      success_url: `${process.env.APP_URL || "http://localhost:3000"}/?success=true`,
-      cancel_url: `${process.env.APP_URL || "http://localhost:3000"}/?canceled=true`,
+      success_url: `${appUrl}/?success=true`,
+      cancel_url: `${appUrl}/?canceled=true`,
       customer_email: req.user.email
     });
     res.json({ id: session.id });
@@ -1382,20 +1527,11 @@ var getUserLibrary = async (req, res) => {
       const baseUrl = `${req2.protocol}://${req2.get("host")}`;
       return `${baseUrl}/${relativePath.replace(/\\/g, "/").replace(/^\//, "")}`;
     };
-    const formatBook = (book) => ({
-      ...book._doc,
-      coverImage: getFullUrl2(req, book.coverImage),
-      fileUrl: getFullUrl2(req, book.fileUrl),
-      authorId: book.authorId ? {
-        ...book.authorId._doc,
-        avatar: getFullUrl2(req, book.authorId.avatar)
-      } : void 0
-    });
     res.json({
-      saved: user.savedBooks.map((b) => formatBook(b)),
+      saved: user.savedBooks.map((b) => formatBookResponse(req, b)),
       history: user.history.filter((h) => h.bookId).map((h) => ({
         ...h._doc,
-        bookId: formatBook(h.bookId)
+        bookId: formatBookResponse(req, h.bookId)
       })).sort((a, b) => new Date(b.lastRead).getTime() - new Date(a.lastRead).getTime())
     });
   } catch (error) {
@@ -1560,10 +1696,18 @@ var errorHandler = (err, req, res, next) => {
         code: "FILE_NOT_FOUND"
       });
     }
-    if (err.message?.includes("Cloudinary")) {
-      return res.status(500).json({
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return res.status(413).json({
         success: false,
-        message: "File upload service error",
+        message: "File too large. Maximum size allowed is 10MB.",
+        code: "FILE_TOO_LARGE"
+      });
+    }
+    if (err.message?.includes("Cloudinary")) {
+      const isSizeError = err.message.includes("File size too large");
+      return res.status(isSizeError ? 413 : 400).json({
+        success: false,
+        message: err.message,
         code: "UPLOAD_ERROR"
       });
     }
@@ -1590,9 +1734,9 @@ var errorHandler = (err, req, res, next) => {
 };
 
 // server.ts
-dotenv2.config();
+dotenv.config();
 var __filename = fileURLToPath(import.meta.url);
-var __dirname = path3.dirname(__filename);
+var __dirname = path4.dirname(__filename);
 var app = express9();
 var isConnected = false;
 var connectionPromise = null;
@@ -1639,13 +1783,39 @@ if (isDev2) {
     crossOriginOpenerPolicy: false
   }));
 }
-app.use(cors({
-  origin: "*",
-  // Allow all origins
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
-app.use(express9.json());
+var allowedOrigins = [
+  "https://silentium.vercel.app",
+  "https://silentium-m9z8.onrender.com",
+  "http://localhost:5173",
+  "http://localhost:3000"
+];
+var corsOptions = {
+  origin: function(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin) || origin.endsWith(".vercel.app") || origin.includes("vercel.app")) {
+      return callback(null, true);
+    }
+    console.error("Blocked by CORS: ", origin);
+    return callback(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+    "Accept",
+    "Origin",
+    "X-Auth-Token"
+  ],
+  exposedHeaders: ["Content-Range", "X-Content-Range"],
+  maxAge: 86400
+  // 24 hours
+};
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
+app.use(express9.json({ limit: "50mb" }));
+app.use(express9.urlencoded({ limit: "50mb", extended: true }));
 app.use(asyncHandler(async (req, res, next) => {
   try {
     await ensureConnection();
@@ -1681,42 +1851,23 @@ app.get("/", (req, res) => {
 });
 app.get("/test-upload", (req, res) => {
   try {
-    const testFile = path3.join(uploadsDir2, "test-sample.pdf");
+    const testFile = path4.join(uploadsDir, "test-sample.pdf");
     const testContent = "Sample PDF content for testing\nCreated: " + (/* @__PURE__ */ new Date()).toISOString();
-    fs3.writeFileSync(testFile, testContent);
+    fs4.writeFileSync(testFile, testContent);
     res.json({
       message: "Test file created",
       file: "test-sample.pdf",
       url: `${req.protocol}://${req.get("host")}/uploads/test-sample.pdf`,
-      uploadsDir: uploadsDir2
+      uploadsDir
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
-var uploadsDir2 = process.env.UPLOADS_PATH || path3.join(process.cwd(), "uploads");
-console.log("Uploads directory:", uploadsDir2);
-console.log("Current working directory:", process.cwd());
-console.log("Environment UPLOADS_PATH:", process.env.UPLOADS_PATH);
-try {
-  if (!fs3.existsSync(uploadsDir2)) {
-    fs3.mkdirSync(uploadsDir2, { recursive: true });
-    console.log("Created uploads directory:", uploadsDir2);
-  } else {
-    console.log("Uploads directory exists");
-  }
-  const testFile = path3.join(uploadsDir2, "test-access.txt");
-  fs3.writeFileSync(testFile, "test");
-  fs3.unlinkSync(testFile);
-  console.log("Uploads directory is writable");
-  try {
-    const files = fs3.readdirSync(uploadsDir2);
-    console.log("Files in uploads:", files.length > 0 ? files : "(empty)");
-  } catch (err) {
-    console.log("Cannot read uploads directory:", err.message);
-  }
-} catch (error) {
-  console.error("Error setting up uploads directory:", error);
+var uploadsDir = process.env.UPLOADS_PATH || path4.join(process.cwd(), "uploads");
+console.log("Uploads directory:", uploadsDir);
+if (!fs4.existsSync(uploadsDir)) {
+  fs4.mkdirSync(uploadsDir, { recursive: true });
 }
 app.use("/api/auth", authRoutes_default);
 app.use("/api/books", bookRoutes_default);
@@ -1750,12 +1901,12 @@ var setupFrontend = async () => {
       console.error("Vite Server Error:", err);
     }
   } else {
-    const distPath = path3.join(process.cwd(), "dist");
-    if (fs3.existsSync(distPath)) {
+    const distPath = path4.join(process.cwd(), "dist");
+    if (fs4.existsSync(distPath)) {
       app.use(express9.static(distPath));
       app.get("*", (req, res, next) => {
         if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) return next();
-        res.sendFile(path3.join(distPath, "index.html"));
+        res.sendFile(path4.join(distPath, "index.html"));
       });
       console.log("Static files serving from:", distPath);
     } else {

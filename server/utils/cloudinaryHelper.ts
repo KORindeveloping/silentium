@@ -1,29 +1,42 @@
 import { v2 as cloudinary } from 'cloudinary';
+import fs from 'fs';
 
-export const uploadToCloudinary = (filePath: string, folder: string, resourceType: 'auto' | 'raw' | 'image' | 'video' = 'auto'): Promise<any> => {
-  return new Promise((resolve, reject) => {
-    cloudinary.uploader.upload(
-      filePath,
-      { 
-        folder, 
-        resource_type: resourceType,
-        type: 'upload', 
-        access_mode: 'public',
-        use_filename: true,
-        unique_filename: true,
-        overwrite: true
-      },
-      (error, result) => {
-        if (result) {
-          console.log(`[Cloudinary] Upload success: ${result.secure_url} (${result.resource_type})`);
-          resolve(result);
-        } else {
-          console.error('Cloudinary upload error:', error);
-          reject(error);
-        }
-      }
-    );
-  });
+/**
+ * Uploads a local file to Cloudinary and deletes the local file afterwards.
+ */
+export const uploadToCloudinary = async (
+  filePath: string, 
+  folder: string, 
+  resourceType: 'auto' | 'raw' | 'image' | 'video' = 'auto'
+): Promise<any> => {
+  try {
+    const result = await cloudinary.uploader.upload(filePath, {
+      folder,
+      resource_type: resourceType,
+      use_filename: true,
+      unique_filename: true,
+      overwrite: true,
+      access_mode: 'public'
+    });
+
+    console.log(`[Cloudinary] Upload success: ${result.secure_url} (${result.resource_type})`);
+    
+    // Clean up local file
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    
+    return result;
+  } catch (error: any) {
+    console.error('[Cloudinary] Upload error:', error);
+    
+    // Clean up local file even on failure
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    
+    throw new Error(`Cloudinary upload failed: ${error.message || 'Unknown error'}`);
+  }
 };
 
 export const getCloudinaryUrl = (publicId: string, resourceType: 'raw' | 'image' = 'raw'): string => {
@@ -33,3 +46,4 @@ export const getCloudinaryUrl = (publicId: string, resourceType: 'raw' | 'image'
   }
   return `https://res.cloudinary.com/${cloudName}/${resourceType}/upload/${publicId}`;
 };
+

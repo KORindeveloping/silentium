@@ -39,14 +39,19 @@ export const createBook = async (req: Request, res: Response) => {
     let coverImageUrl: string | undefined;
     const storageType = 'cloudinary';
 
-    // Cloudinary files are already uploaded by middleware
+    // Upload files to Cloudinary
     if (files?.['file']?.[0]) {
-      fileKey = (files['file'][0] as any).filename;
+      const file = files['file'][0];
+      const result = await uploadToCloudinary(file.path, 'books/files', 'raw');
+      fileKey = result.public_id;
     }
 
     if (files?.['coverImage']?.[0]) {
-      coverImageUrl = (files['coverImage'][0] as any).path;
+      const file = files['coverImage'][0];
+      const result = await uploadToCloudinary(file.path, 'books/covers', 'image');
+      coverImageUrl = result.secure_url;
     }
+
 
     if (!fileKey && !content) {
       return res.status(400).json({ message: 'Please provide either a file or write content.' });
