@@ -87,17 +87,6 @@ export const createBook = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Book creation failed', error: error.message });
   }
 };
-        details: error
-      });
-    }
-
-    res.status(400).json({
-      message: msg,
-      code: 'UPLOAD_ERROR',
-      details: error
-    });
-  }
-};
 
 /** @route GET /api/books/:id/file */
 export const streamBookFile = async (req: Request, res: Response) => {

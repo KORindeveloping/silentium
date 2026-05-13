@@ -1,24 +1,64 @@
-import { CloudinaryStorage } from 'multer-storage-cloudinary';
-import cloudinary from './cloudinary';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { v2 as cloudinary } from 'cloudinary';
+import { Request } from 'express';
 
-export const pdfStorage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: async (req, file) => {
-    return {
-      folder: 'books/files',
-      resource_type: 'raw',
-      format: 'pdf',
-      public_id: `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9]/g, '_')}`,
-    };
+const tempDir = 'temp_uploads';
+
+// Ensure temporary directory exists
+if (!fs.existsSync(tempDir)) {
+  fs.mkdirSync(tempDir);
+}
+
+// Multer storage configuration for temporary local storage
+const storage = multer.diskStorage({
+  destination: function (req: Request, file: Express.Multer.File, cb: (error: null, destination: string) => void) {
+    cb(null, tempDir);
   },
+  filename: function (req: Request, file: Express.Multer.File, cb: (error: null, filename: string) => void) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
 });
 
-export const imageStorage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: async (req, file) => {
-    return {
-      folder: 'books/covers',
-      resource_type: 'image',
-    };
-  },
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+  fileFilter: function (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) {
+    // Accept only PDF files for 'file' field
+    if (file.fieldname === 'file' && file.mimetype !== 'application/pdf') {
+      return cb(new Error('Only PDF files are allowed for the book file.'));
+    }
+    // Accept only image files for 'coverImage' field
+    if (file.fieldname === 'coverImage' && !file.mimetype.startsWith('image/')) {
+      return cb(new Error('Only image files are allowed for the cover image.'));
+    }
+    cb(null, true);
+  }
 });
+
+// Function to upload a file from a local path to Cloudinary
+export const uploadToCloudinary = async (filePath: string, folder: string, resourceType: 'raw' | 'image' = 'raw'): Promise<any> => {
+  try {
+    const result = await cloudinary.uploader.upload(filePath, {
+      folder: folder,
+      resource_type: resourceType,
+      use_filename: true,
+      unique_filename: true,
+      overwrite: true
+    });
+    // Clean up the temporary file after upload
+    fs.unlinkSync(filePath);
+    return result;
+  } catch (error: any) {
+    console.error('Cloudinary upload error:', error);
+    // Attempt to clean up temp file even if upload fails
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    throw new Error(`Cloudinary upload failed: ${error?.message || 'Unknown error'}`);
+  }
+};
+
+export default upload;

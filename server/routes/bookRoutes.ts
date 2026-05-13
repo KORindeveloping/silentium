@@ -1,16 +1,8 @@
 import express from 'express';
 import { getBooks, getBookById, createBook, updateBook, deleteBook, toggleLike, streamBookFile } from '../controllers/bookController';
 import { protect, optionalProtect, author } from '../middleware/authMiddleware';
-import multer from 'multer';
-import { pdfStorage, imageStorage } from '../middleware/uploadMiddleware';
+import upload from '../middleware/uploadMiddleware';
 import { asyncHandler } from '../middleware/asyncHandler';
-
-const upload = multer({ 
-  storage: pdfStorage,
-  limits: { fileSize: 50 * 1024 * 1024 } // 50MB
-});
-
-const uploadImage = multer({ storage: imageStorage });
 
 const router = express.Router();
 
