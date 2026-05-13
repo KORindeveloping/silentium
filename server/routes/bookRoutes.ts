@@ -1,8 +1,16 @@
 import express from 'express';
 import { getBooks, getBookById, createBook, updateBook, deleteBook, toggleLike, streamBookFile } from '../controllers/bookController';
 import { protect, optionalProtect, author } from '../middleware/authMiddleware';
-import upload from '../middleware/uploadMiddleware';
+import multer from 'multer';
+import { pdfStorage, imageStorage } from '../middleware/uploadMiddleware';
 import { asyncHandler } from '../middleware/asyncHandler';
+
+const upload = multer({ 
+  storage: pdfStorage,
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB
+});
+
+const uploadImage = multer({ storage: imageStorage });
 
 const router = express.Router();
 
@@ -10,7 +18,12 @@ router.get('/:id/file', optionalProtect, asyncHandler(streamBookFile));
 
 router.route('/')
   .get(asyncHandler(getBooks))
-  .post(protect, author, upload.fields([{ name: 'file', maxCount: 1 }, { name: 'coverImage', maxCount: 1 }]), asyncHandler(createBook));
+  .post(
+    protect, 
+    author, 
+    upload.fields([{ name: 'file', maxCount: 1 }, { name: 'coverImage', maxCount: 1 }]), 
+    asyncHandler(createBook)
+  );
 
 router.route('/:id')
   .get(asyncHandler(getBookById))

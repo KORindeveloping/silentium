@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Document as DocType, User } from '../types';
-import { ArrowLeft, Bookmark, Share2, Maximize2, Lock, Upload, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Bookmark, Share2, Maximize2, Lock, Upload, Zap, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { pdfjs, Document, Page } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
@@ -9,7 +9,7 @@ import 'react-pdf/dist/Page/TextLayer.css';
 import { API_BASE_URL } from '../config';
 import { useAuth } from '../contexts/AuthContext';
 
-// Configure PDF.js worker with proper CORS and error handling
+// Configure PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 export const Reader: React.FC = () => {
@@ -17,59 +17,27 @@ export const Reader: React.FC = () => {
   const navigate = useNavigate();
   const [doc, setDoc] = useState<DocType | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [scale, setScale] = useState<number>(1.2);
   const [error, setError] = useState<string | null>(null);
 
-  // Growth Strategy: Limit preview pages for non-premium/no-credit users
   const PREVIEW_LIMIT = 3;
   const [isLocked, setIsLocked] = useState(false);
   const showBlur = isLocked && currentPage >= PREVIEW_LIMIT;
 
-  const { user: authUser } = useAuth();
-
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const { user: authUser, token } = useAuth();
 
   useEffect(() => {
-    // Set user from auth context if available
-    if (authUser && token) {
-      setUser(authUser);
-    }
-
     fetch(`${API_BASE_URL}/api/books/${id}`)
       .then(res => res.json())
       .then(data => {
-        console.log("RAW BOOK DATA FROM API:", data);
         setDoc(data);
-        // Check lock status once doc and user are available
-        const isOwner = authUser && data.author && (authUser._id === data.author._id);
+        const isOwner = authUser && data.authorId && (authUser._id === data.authorId);
         const isAdmin = authUser?.role === 'admin';
         const hasCredits = authUser && authUser.credits > 0;
         setIsLocked(!authUser || (!hasCredits && !isAdmin && !isOwner));
       });
-
-    // Fetch PDF as blob — sends auth header if available for analytics
-    const fetchPdfBlob = async () => {
-      try {
-        const headers: Record<string, string> = {};
-        const currentToken = localStorage.getItem('token');
-        if (currentToken) {
-          headers['Authorization'] = `Bearer ${currentToken}`;
-        }
-        const response = await fetch(`${API_BASE_URL}/api/books/${id}/file`, { headers });
-        if (!response.ok) throw new Error(`Failed to fetch PDF (${response.status})`);
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        setPdfUrl(url);
-      } catch (err) {
-        console.error('Error fetching PDF blob:', err);
-        setError('Failed to load PDF. Please try refreshing the page.');
-      }
-    };
-
-    fetchPdfBlob();
 
     const interval = setInterval(() => {
       const currentToken = localStorage.getItem('token');
@@ -81,17 +49,12 @@ export const Reader: React.FC = () => {
             'Authorization': `Bearer ${currentToken}` 
           },
           body: JSON.stringify({ bookId: id, minutes: 0.5 })
-        }).catch((err) => {
-          console.warn('Analytics tracking failed:', err);
-        });
+        }).catch((err) => console.warn('Analytics tracking failed:', err));
       }
     }, 30000);
 
-    return () => {
-      clearInterval(interval);
-      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
-    };
-  }, [id, token, authUser]);
+    return () => clearInterval(interval);
+  }, [id, authUser]);
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);

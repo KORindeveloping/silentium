@@ -35,59 +35,21 @@ export const createBook = async (req: Request, res: Response) => {
     const { title, description, category, tags, visibility, content, readingMinutes, pageCount } = req.body;
     const files = req.files as { [fieldname: string]: Express.Multer.File[] };
 
-    if (!files?.['file'] && !content) {
-      return res.status(400).json({ message: 'Please provide either a file or write content.' });
-    }
-
-    const needsCloudinaryUpload = !!(files?.['file']?.[0] || files?.['coverImage']?.[0]);
-    if (needsCloudinaryUpload && !isCloudinaryConfigured()) {
-      return res.status(503).json({
-        message:
-          'Cloudinary is not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in the server environment (e.g. Render dashboard).',
-        code: 'CLOUDINARY_NOT_CONFIGURED'
-      });
-    }
-
-    let fileUrl: string | undefined;
     let fileKey: string | undefined;
-    let storageType: 'cloudinary' | 'local' | undefined;
     let coverImageUrl: string | undefined;
+    const storageType = 'cloudinary';
 
-    // Upload File (PDF/Doc) - Always use Cloudinary for permanent storage
+    // Cloudinary files are already uploaded by middleware
     if (files?.['file']?.[0]) {
-      const file = files['file'][0];
-      const fileSizeMB = file.size / (1024 * 1024);
-
-      try {
-        const result = await uploadToCloudinary(file.path, 'books/files', 'raw');
-        fileKey = result.public_id;
-        storageType = 'cloudinary';
-        console.log(`File uploaded to Cloudinary. Key: ${fileKey}`);
-
-        // Clean up temporary file
-        if (fs.existsSync(file.path)) {
-          fs.unlinkSync(file.path);
-        }
-      } catch (error: any) {
-        console.error('Cloudinary upload failed:', error);
-        throw new Error(`Cloudinary upload failed: ${error?.message || 'Unknown error'}`);
-      }
+      fileKey = (files['file'][0] as any).filename;
     }
 
-    // Upload Cover Image
     if (files?.['coverImage']?.[0]) {
-      try {
-        const result = await uploadToCloudinary(files['coverImage'][0].path, 'books/covers');
-        coverImageUrl = result.secure_url;
+      coverImageUrl = (files['coverImage'][0] as any).path;
+    }
 
-        // Clean up temp file
-        if (fs.existsSync(files['coverImage'][0].path)) {
-          fs.unlinkSync(files['coverImage'][0].path);
-        }
-      } catch (error: any) {
-        console.error('Cloudinary cover image upload failed:', error);
-        throw new Error(`Cloudinary cover image upload failed: ${error?.message || 'Unknown error'}`);
-      }
+    if (!fileKey && !content) {
+      return res.status(400).json({ message: 'Please provide either a file or write content.' });
     }
 
     const book = new Book({
@@ -108,7 +70,7 @@ export const createBook = async (req: Request, res: Response) => {
 
     const createdBook = await book.save();
 
-    if (fileUrl || content) {
+    if (fileKey || content) {
       await User.findByIdAndUpdate((req as any).user._id, {
         $inc: { credits: 3 }
       });
@@ -120,34 +82,11 @@ export const createBook = async (req: Request, res: Response) => {
       error: error?.message || error,
       stack: error?.stack,
       timestamp: new Date().toISOString(),
-      userAgent: req.get('User-Agent'),
-      ip: req.ip
     });
     
-    const msg = typeof error?.message === 'string' ? error.message : 'Upload failed';
-
-    // Handle file size limit errors (now 50MB)
-    // Handle file size limit errors
-    if (msg.includes('File size too large') || msg.includes('file size') || msg.includes('LIMIT_FILE_SIZE')) {
-      return res.status(413).json({
-        message: 'File size too large. Maximum file size is 50MB.',
-        code: 'FILE_TOO_LARGE'
-      });
-    }
-
-    if (/must supply api_key/i.test(msg)) {
-      return res.status(503).json({
-        message:
-          'Cloudinary rejected the upload (missing credentials). Confirm CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET are set correctly on Render.',
-        code: 'CLOUDINARY_MISSING_API_KEY'
-      });
-    }
-
-    // Handle specific Cloudinary errors
-    if (error?.name === 'Error' && error?.http_code) {
-      return res.status(error.http_code).json({
-        message: `Cloudinary error: ${msg}`,
-        code: 'CLOUDINARY_ERROR',
+    res.status(500).json({ message: 'Book creation failed', error: error.message });
+  }
+};
         details: error
       });
     }

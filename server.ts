@@ -184,21 +184,8 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Serve static files from uploads directory with CORS headers
-app.use('/uploads', cors(corsOptions), (req, res, next) => {
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  next();
-}, (req, res, next) => {
-  // Custom handler for /uploads to return JSON 404 for missing files
-  const filePath = path.join(uploadsDir, req.path);
-  if (!fs.existsSync(filePath)) {
-    console.warn(`Local uploaded file not found: ${filePath}`);
-    return res.status(404).json({ message: 'File not found', path: req.path });
-  }
-  express.static(uploadsDir)(req, res, next);
-});
+// Note: New uploads are stored in Cloudinary, local support removed for books.
 
-// Note: New uploads are stored in Cloudinary, but local support is kept for legacy files and avatars
 
 // 4. API Routes
 app.use('/api/auth', authRoutes);
