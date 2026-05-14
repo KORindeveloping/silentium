@@ -144,8 +144,17 @@ export const streamBookFile = async (req: Request, res: Response) => {
     res.setHeader('Content-Disposition', `inline; filename="${fileName}.pdf"`);
 
     if (isCloudinary) {
-      console.log(`[DEBUG] FINAL REDIRECT: Sending 302 to: ${fileUrl}`);
-      return res.redirect(302, fileUrl);
+      const publicId = book.fileKey || '';
+      if (!publicId) {
+        console.error(`[DEBUG] Missing fileKey for Cloudinary book: ${bookId}`);
+        return res.status(404).json({ message: 'Cloudinary resource ID missing' });
+      }
+
+      console.log(`[DEBUG] Generating signed URL for: ${publicId}`);
+      const signedUrl = getSignedCloudinaryUrl(publicId, 'raw');
+      
+      console.log(`[DEBUG] Redirecting to SIGNED URL: ${signedUrl}`);
+      return res.redirect(302, signedUrl);
     } else {
       // Local Storage Fallback
       const relativePath = extractUploadsRelative(fileUrl || '');
