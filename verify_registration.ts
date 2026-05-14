@@ -1,6 +1,14 @@
 
 const API_URL = 'http://localhost:3000/api';
 
+interface ErrorResponse {
+  response?: {
+    status: number;
+    data: any;
+  };
+  message?: string;
+}
+
 const verify = async () => {
   try {
     console.log('--- Verifying Registration ---');
@@ -61,11 +69,14 @@ const verify = async () => {
     console.log('\n--- ALL VERIFICATIONS PASSED ---');
   } catch (error: any) {
     console.error('Verification Failed:');
-    if (error.response) {
-      console.error('Status:', error.response.status);
-      console.error('Data:', error.response.data);
+    const err = error as ErrorResponse;
+    if (err.response) {
+      console.error('Status:', err.response.status);
+      console.error('Data:', err.response.data);
+    } else if (err.message) {
+      console.error('Error:', err.message);
     } else {
-      console.error('Error:', error.message || error);
+      console.error('Error:', String(error));
     }
     process.exit(1);
   }
