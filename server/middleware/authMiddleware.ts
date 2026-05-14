@@ -33,7 +33,7 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
       });
     }
     
-    return next();
+    next();
   } catch (error: any) {
     console.error('JWT Error:', error.message, 'Token snippet:', token.substring(0, 10) + '...');
     if (error.name === 'JsonWebTokenError') {
@@ -75,7 +75,7 @@ export const optionalProtect = async (req: AuthRequest, res: Response, next: Nex
   } else {
     console.log('[DEBUG] optionalProtect - No token provided (proceeding as guest)');
   }
-  return next();
+  next();
 };
 
 export const admin = (req: AuthRequest, res: Response, next: NextFunction) => {
