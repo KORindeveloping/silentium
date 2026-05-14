@@ -144,18 +144,8 @@ export const streamBookFile = async (req: Request, res: Response) => {
     res.setHeader('Content-Disposition', `inline; filename="${fileName}.pdf"`);
 
     if (isCloudinary) {
-      try {
-        console.log(`[DEBUG] Redirecting to PUBLIC URL: ${fileUrl}`);
-        return res.redirect(302, fileUrl);
-      } catch (error: any) {
-        console.error('[DEBUG] Cloudinary Redirect Error:', error);
-        if (!res.headersSent) {
-          res.status(500).json({ 
-            message: 'Error redirecting to cloud storage',
-            error: error.message 
-          });
-        }
-      }
+      console.log(`[DEBUG] FINAL REDIRECT: Sending 302 to: ${fileUrl}`);
+      return res.redirect(302, fileUrl);
     } else {
       // Local Storage Fallback
       const relativePath = extractUploadsRelative(fileUrl || '');
