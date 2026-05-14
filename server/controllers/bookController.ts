@@ -150,11 +150,27 @@ export const streamBookFile = async (req: Request, res: Response) => {
 
     if (isCloudinary) {
       try {
-        console.log(`Proxying Cloudinary file: ${fileUrl}`);
+        // Ensure we have a valid URL
+        if (!fileUrl) {
+          console.error(`[DEBUG] Cloudinary fileUrl is missing for book ${bookId}`);
+          return res.status(404).json({ message: 'Cloudinary file URL could not be generated' });
+        }
+
+        console.log(`[DEBUG] Proxying Cloudinary file: ${fileUrl}`);
         
-        // Add transformation to ensure raw file access and avoid 401 errors
-        const rawUrl = fileUrl.replace(/\/upload\//, '/upload/fl_attachment/').replace(/\.[^.]+$/, '');
-        const response = await fetch(rawUrl, {
+        // For raw files (PDFs), we MUST preserve the extension. 
+        // Cloudinary flags like fl_attachment can be added, but the extension is required for raw resources.
+        // We'll use the original URL but ensure it's not mangled.
+        let proxyUrl = fileUrl;
+        
+        // Only add fl_attachment if it's not already there and we are sure it's a Cloudinary URL
+        if (proxyUrl.includes('res.cloudinary.com') && !proxyUrl.includes('fl_attachment')) {
+          proxyUrl = proxyUrl.replace(/\/upload\//, '/upload/fl_attachment/');
+        }
+
+        console.log(`[DEBUG] Fetching from Cloudinary: ${proxyUrl}`);
+
+        const response = await fetch(proxyUrl, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (compatible; Silentium-PDF-Viewer)',
             'Accept': 'application/pdf,*/*'
@@ -162,22 +178,24 @@ export const streamBookFile = async (req: Request, res: Response) => {
         });
         
         if (!response.ok) {
-          console.error(`Cloudinary fetch failed: ${response.status} ${response.statusText}`);
+          console.error(`[DEBUG] Cloudinary fetch failed: ${response.status} ${response.statusText} for URL: ${proxyUrl}`);
           return res.status(response.status).json({ 
             message: `Failed to fetch file from cloud storage (${response.status})`,
-            url: rawUrl,
+            url: proxyUrl,
             error: response.statusText
           });
         }
         
         if (response.body) {
+          console.log(`[DEBUG] Successfully streaming file for book ${bookId}`);
           res.status(response.status);
           response.body.pipe(res);
         } else {
+          console.error(`[DEBUG] Cloud storage response has no body for book ${bookId}`);
           res.status(500).json({ message: 'Cloud storage response has no body' });
         }
       } catch (error: any) {
-        console.error('Proxy Error (Cloudinary):', error);
+        console.error('[DEBUG] Proxy Error (Cloudinary):', error);
         if (!res.headersSent) {
           res.status(500).json({ 
             message: 'Error streaming from cloud storage',
