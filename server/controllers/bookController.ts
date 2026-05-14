@@ -151,28 +151,29 @@ export const streamBookFile = async (req: Request, res: Response) => {
           return res.status(404).json({ message: 'Cloudinary resource ID missing' });
         }
 
-        console.log(`[DEBUG] Generating signed URL for: ${publicId}`);
-        const signedUrl = getSignedCloudinaryUrl(publicId, 'raw');
-        
-        console.log(`[DEBUG] Proxying signed URL: ${signedUrl}`);
+        console.log(`[DEBUG] Proxying PUBLIC URL: ${fileUrl}`);
 
-        const response = await fetch(signedUrl, {
+        const response = await fetch(fileUrl, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (compatible; Silentium-PDF-Viewer)',
             'Accept': 'application/pdf,*/*'
           }
         });
         
+        console.log(`[DEBUG] Cloudinary public fetch status: ${response.status} ${response.statusText}`);
+        
         if (!response.ok) {
-          console.error(`[DEBUG] Cloudinary signed fetch failed: ${response.status} ${response.statusText}`);
+          const errorText = await response.text();
+          console.error(`[DEBUG] Cloudinary public fetch failed: ${response.status} ${response.statusText}. Response body: ${errorText}`);
           return res.status(response.status).json({ 
-            message: `Failed to fetch secure file (${response.status})`,
-            error: response.statusText
+            message: `Failed to fetch file (${response.status})`,
+            error: response.statusText,
+            details: errorText
           });
         }
         
         if (response.body) {
-          console.log(`[DEBUG] Successfully streaming signed file for book ${bookId}`);
+          console.log(`[DEBUG] Successfully streaming file for book ${bookId}`);
           res.status(response.status);
           response.body.pipe(res);
         } else {
