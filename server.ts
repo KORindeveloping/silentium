@@ -204,7 +204,7 @@ app.use('/api/documents', bookRoutes);
 // 5. Frontend / Vite
 const setupFrontend = async () => {
   // Log startup information for debugging
-  console.log('=== Silentium Server Startup [FIX_VER: 1.0.6] ===');
+  console.log('=== Silentium Server Startup [FIX_VER: 1.0.7] ===');
   console.log('Environment:', process.env.NODE_ENV);
   console.log('Platform:', process.platform);
   console.log('Node Version:', process.version);
