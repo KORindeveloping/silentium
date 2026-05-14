@@ -5,8 +5,8 @@ import { Readable } from 'node:stream';
 import Book from '../models/Book';
 import User from '../models/User';
 import { formatBookResponse } from '../utils/bookFormatter.js';
-import { uploadToCloudinary, getCloudinaryUrl } from '../utils/cloudinaryHelper';
-import { isCloudinaryConfigured } from '../config/cloudinary';
+import { uploadToCloudinary, getCloudinaryUrl, getSignedCloudinaryUrl } from '../utils/cloudinaryHelper';
+import { isCloudinaryConfigured } from '../utils/cloudinaryHelper'; // Re-export or use existing check
 import fetch from 'node-fetch';
 
 const uploadsDirRoot = () => process.env.UPLOADS_PATH || path.join(process.cwd(), 'uploads');
@@ -145,55 +145,25 @@ export const streamBookFile = async (req: Request, res: Response) => {
 
     if (isCloudinary) {
       try {
-        // Ensure we have a valid URL
-        if (!fileUrl) {
-          console.error(`[DEBUG] Cloudinary fileUrl is missing for book ${bookId}`);
-          return res.status(404).json({ message: 'Cloudinary file URL could not be generated' });
+        const publicId = book.fileKey || '';
+        if (!publicId) {
+          console.error(`[DEBUG] Missing fileKey for Cloudinary book: ${bookId}`);
+          return res.status(404).json({ message: 'Cloudinary resource ID missing' });
         }
 
-        console.log(`[DEBUG] Proxying Cloudinary file: ${fileUrl}`);
+        console.log(`[DEBUG] Generating signed URL for: ${publicId}`);
+        const signedUrl = getSignedCloudinaryUrl(publicId, 'raw');
         
-        // For raw files (PDFs), we MUST preserve the extension. 
-        // Cloudinary flags like fl_attachment can be added, but the extension is required for raw resources.
-        // We'll use the original URL but ensure it's not mangled.
-        let proxyUrl = fileUrl;
+        console.log(`[DEBUG] Redirecting to signed URL: ${signedUrl}`);
         
-        // Only add fl_attachment if it's not already there and we are sure it's a Cloudinary URL
-        if (proxyUrl.includes('res.cloudinary.com') && !proxyUrl.includes('fl_attachment')) {
-          proxyUrl = proxyUrl.replace(/\/upload\//, '/upload/fl_attachment/');
-        }
-
-        console.log(`[DEBUG] Fetching from Cloudinary: ${proxyUrl}`);
-
-        const response = await fetch(proxyUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; Silentium-PDF-Viewer)',
-            'Accept': 'application/pdf,*/*'
-          }
-        });
-        
-        if (!response.ok) {
-          console.error(`[DEBUG] Cloudinary fetch failed: ${response.status} ${response.statusText} for URL: ${proxyUrl}`);
-          return res.status(response.status).json({ 
-            message: `Failed to fetch file from cloud storage (${response.status})`,
-            url: proxyUrl,
-            error: response.statusText
-          });
-        }
-        
-        if (response.body) {
-          console.log(`[DEBUG] Successfully streaming file for book ${bookId}`);
-          res.status(response.status);
-          response.body.pipe(res);
-        } else {
-          console.error(`[DEBUG] Cloud storage response has no body for book ${bookId}`);
-          res.status(500).json({ message: 'Cloud storage response has no body' });
-        }
+        // Ensure CORS headers are set for the redirect so PDF.js can follow it
+        res.setHeader('Access-Control-Expose-Headers', 'Location');
+        return res.redirect(302, signedUrl);
       } catch (error: any) {
-        console.error('[DEBUG] Proxy Error (Cloudinary):', error);
+        console.error('[DEBUG] Cloudinary Signed URL Error:', error);
         if (!res.headersSent) {
           res.status(500).json({ 
-            message: 'Error streaming from cloud storage',
+            message: 'Error generating cloud storage access',
             error: error.message 
           });
         }

@@ -47,3 +47,20 @@ export const getCloudinaryUrl = (publicId: string, resourceType: 'raw' | 'image'
   return `https://res.cloudinary.com/${cloudName}/${resourceType}/upload/${publicId}`;
 };
 
+/**
+ * Generates a signed URL for a Cloudinary resource.
+ * Required for resources with access_mode 'authenticated' or 'private'.
+ */
+export const getSignedCloudinaryUrl = (publicId: string, resourceType: 'raw' | 'image' = 'raw'): string => {
+  if (!isCloudinaryConfigured()) {
+    return getCloudinaryUrl(publicId, resourceType);
+  }
+
+  return cloudinary.url(publicId, {
+    resource_type: resourceType,
+    secure: true,
+    sign_url: true,
+    type: 'upload'
+  });
+};
+
