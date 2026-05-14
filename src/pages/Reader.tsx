@@ -42,10 +42,12 @@ export const Reader: React.FC = () => {
         
         // Pre-fetch PDF as blob for cleaner PDF.js loading
         if (data.fileType === 'pdf') {
-          const fileUrl = `${API_BASE_URL}/api/books/${id}/file${token ? `?token=${token}` : ''}`;
+          // Send request without any Authorization headers or tokens
+          const fileUrl = `${API_BASE_URL}/api/books/${id}/file`;
           console.log(`[DEBUG] Reader fetching PDF from: ${fileUrl}`);
           fetch(fileUrl, {
-            headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            method: 'GET'
+            // Explicitly no headers to prevent auth issues
           })
           .then(async res => {
             if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
