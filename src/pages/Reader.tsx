@@ -132,10 +132,10 @@ export const Reader: React.FC = () => {
             <span className="text-xs uppercase tracking-widest">Back to library</span>
           </Link>
           <div className="flex items-center gap-8">
-             {user && (
+             {authUser && (
                <div className="flex items-center gap-2 px-4 py-1.5 bg-white/5 rounded-full border border-white/10">
                  <Zap size={14} className="text-yellow-400 fill-yellow-400" />
-                 <span className="text-[10px] uppercase tracking-widest font-bold text-soft-white">{user.credits} Credits</span>
+                 <span className="text-[10px] uppercase tracking-widest font-bold text-soft-white">{authUser.credits} Credits</span>
                </div>
              )}
             <div className="flex gap-6">

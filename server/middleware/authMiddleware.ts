@@ -60,7 +60,8 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
 export const optionalProtect = async (req: AuthRequest, res: Response, next: NextFunction) => {
   console.log(`[DEBUG] Entering optionalProtect for: ${req.path}`);
   // Try header first, then query parameter
-  const token = req.headers.authorization?.split(" ")[1] || req.query.token as string;
+  const authHeader = req.headers.authorization;
+  const token = (authHeader && authHeader.startsWith('Bearer ')) ? authHeader.split(" ")[1] : req.query.token as string;
   
   if (token) {
     console.log(`[DEBUG] optionalProtect - Token found (first 10 chars): ${token.substring(0, 10)}`);
@@ -69,11 +70,10 @@ export const optionalProtect = async (req: AuthRequest, res: Response, next: Nex
       req.user = await User.findById(decoded.id).select('-passwordHash');
       console.log(`[DEBUG] optionalProtect - User found: ${!!req.user}`);
     } catch (err: any) {
-      // Token invalid — that's fine, proceed without user
-      console.warn('[DEBUG] optionalProtect - Invalid token:', err.message);
+      console.warn('[DEBUG] optionalProtect - Invalid token (proceeding as guest):', err.message);
     }
   } else {
-    console.log('[DEBUG] optionalProtect - No token provided');
+    console.log('[DEBUG] optionalProtect - No token provided (proceeding as guest)');
   }
   return next();
 };
