@@ -31,7 +31,9 @@ export const formatBookResponse = (req: Request, book: any) => {
     coverImage: getFullUrl(b.coverImage),
     // Proxy URL only — never expose raw storage URLs
     fileUrl: `${baseUrl}/api/books/${b._id}/file`,
-    fileType: b.fileUrl?.toLowerCase().endsWith('.pdf') || b.fileKey?.toLowerCase().endsWith('.pdf') ? 'pdf' : 'other',
+    fileType: (b.fileUrl && typeof b.fileUrl === 'string' && b.fileUrl.toLowerCase().endsWith('.pdf')) || 
+              (b.fileKey && typeof b.fileKey === 'string' && b.fileKey.toLowerCase().endsWith('.pdf')) 
+              ? 'pdf' : 'other',
     // fileKey intentionally omitted — internal storage detail, never expose to client
     content: b.content,
     pageCount: b.pageCount,

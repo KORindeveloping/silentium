@@ -300,9 +300,11 @@ export const getBooks = async (req: Request, res: Response) => {
 // @route   GET /api/books/:id
 // @access  Public
 export const getBookById = async (req: Request, res: Response) => {
-  const book = await Book.findById(req.params.id).populate('authorId', 'name email avatar credits');
+  const bookId = req.params.id;
+  const book = await Book.findById(bookId).populate('authorId', 'name email avatar credits');
 
   if (book) {
+    console.log(`[DEBUG] getBookById - Book: ${bookId}, title: ${book.title}, fileUrl: ${!!book.fileUrl}, fileKey: ${!!book.fileKey}`);
     book.views += 1;
     await book.save();
 

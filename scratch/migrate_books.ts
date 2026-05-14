@@ -21,8 +21,8 @@ const migrate = async () => {
         const parts = book.fileUrl.split('/');
         const uploadIdx = parts.indexOf('upload');
         if (uploadIdx !== -1 && uploadIdx + 2 < parts.length) {
-           // We take everything after the version
-           book.fileKey = parts.slice(uploadIdx + 2).join('/').split('.')[0];
+           // We take everything after the version, preserving the extension
+           book.fileKey = parts.slice(uploadIdx + 2).join('/');
         }
       } else {
         book.storageType = 'local';
