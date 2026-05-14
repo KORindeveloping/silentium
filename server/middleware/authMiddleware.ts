@@ -58,17 +58,22 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
 // Like protect, but doesn't block — attaches user if token is valid, continues regardless
 // Also supports token via query parameter for PDF viewers that don't send headers
 export const optionalProtect = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  console.log(`[DEBUG] Entering optionalProtect for: ${req.path}`);
   // Try header first, then query parameter
   const token = req.headers.authorization?.split(" ")[1] || req.query.token as string;
   
   if (token) {
+    console.log(`[DEBUG] optionalProtect - Token found (first 10 chars): ${token.substring(0, 10)}`);
     try {
       const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'secret');
       req.user = await User.findById(decoded.id).select('-passwordHash');
-    } catch {
+      console.log(`[DEBUG] optionalProtect - User found: ${!!req.user}`);
+    } catch (err: any) {
       // Token invalid — that's fine, proceed without user
-      console.warn('Invalid token provided (header or query):', token);
+      console.warn('[DEBUG] optionalProtect - Invalid token:', err.message);
     }
+  } else {
+    console.log('[DEBUG] optionalProtect - No token provided');
   }
   return next();
 };

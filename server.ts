@@ -26,6 +26,14 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+// Global Request Logger for Debugging
+app.use((req, res, next) => {
+  if (req.path.includes('/api/')) {
+    console.log(`[DEBUG] Incoming Request: ${req.method} ${req.path} ${JSON.stringify(req.query)}`);
+  }
+  next();
+});
+
 // Database connection management for Serverless/Cloud
 let isConnected = false;
 let connectionPromise: Promise<void> | null = null;
