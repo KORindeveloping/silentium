@@ -190,12 +190,14 @@ export const streamBookFile = async (req: Request, res: Response) => {
           }
         } else {
           console.log(`Fallback redirect to: ${fileUrl}`);
-          res.redirect(302, fileUrl);
+          return res.redirect(302, fileUrl);
         }
       }
     }
   } catch (globalError: any) {
-    if (!res.headersSent) res.status(500).json({ message: 'Proxy fatal error', error: globalError.message });
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Proxy fatal error', error: globalError.message });
+    }
   }
 };
 
