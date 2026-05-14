@@ -59,7 +59,10 @@ export const registerUser = async (req: Request, res: Response, next: NextFuncti
       email,
       passwordHash: password,
       role: role || 'reader',
-      verificationToken
+      verificationToken,
+      streak: 0,
+      longestStreak: 0,
+      lastLostStreak: 0
     });
 
     if (user) {
@@ -135,7 +138,7 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
             user.streak += 1;
           } else {
             // Gap of more than 1 day
-            if (user.streak > 1) {
+            if (user.streak > 0) {
               user.lastLostStreak = user.streak;
             }
             user.streak = 1;
@@ -145,6 +148,10 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
             user.longestStreak = user.streak;
           }
         }
+      } else {
+        // First login ever
+        user.streak = 1;
+        user.longestStreak = 1;
       }
       
       user.lastLogin = now;
@@ -211,9 +218,9 @@ export const getUserProfile = async (req: Request, res: Response, next: NextFunc
         location: user.location,
         avatar: getFullUrl(req, user.avatar),
         notificationPreferences: user.notificationPreferences,
-        streak: user.streak,
-        longestStreak: user.longestStreak,
-        lastLostStreak: user.lastLostStreak,
+        streak: user.streak ?? 0,
+        longestStreak: user.longestStreak ?? 0,
+        lastLostStreak: user.lastLostStreak ?? 0,
         createdAt: user.createdAt,
       });
     } else {
