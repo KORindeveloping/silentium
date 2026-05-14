@@ -1,5 +1,5 @@
 // server.ts
-import dotenv from "dotenv";
+import dotenv2 from "dotenv";
 import express9 from "express";
 import { createServer as createViteServer } from "vite";
 import path4 from "path";
@@ -459,39 +459,59 @@ var protect = async (req, res, next) => {
     console.error("Fatal: next is not a function in protect middleware");
     return res.status(500).json({ message: "Internal Server Error (next is not a function)" });
   }
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.split(" ")[1];
+  if (!token || token === "undefined" || token === "null") {
     return res.status(401).json({
-      message: "Not authorized, no token"
+      message: "Not authorized, no valid token provided",
+      code: "NO_TOKEN"
     });
   }
   try {
     const decoded = jwt2.verify(token, process.env.JWT_SECRET || "secret");
     req.user = await User_default.findById(decoded.id).select("-passwordHash");
     if (!req.user) {
-      return res.status(401).json({ message: "Not authorized, user not found" });
+      return res.status(401).json({
+        message: "Not authorized, user no longer exists in database. Your session may have been cleared if using in-memory storage.",
+        code: "USER_NOT_FOUND"
+      });
     }
     return next();
   } catch (error) {
-    console.error("JWT Error:", error.message);
+    console.error("JWT Error:", error.message, "Token snippet:", token.substring(0, 10) + "...");
     if (error.name === "JsonWebTokenError") {
-      return res.status(401).json({ message: "Not authorized, invalid token" });
+      return res.status(401).json({
+        message: "Not authorized, invalid or malformed token",
+        code: "INVALID_TOKEN"
+      });
     }
     if (error.name === "TokenExpiredError") {
-      return res.status(401).json({ message: "Not authorized, token expired" });
+      return res.status(401).json({
+        message: "Not authorized, token expired",
+        code: "TOKEN_EXPIRED"
+      });
     }
-    return res.status(401).json({ message: "Not authorized, token failed" });
+    return res.status(401).json({
+      message: "Not authorized, token validation failed",
+      code: "AUTH_FAILED"
+    });
   }
 };
 var optionalProtect = async (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1] || req.query.token;
+  console.log(`[DEBUG] Entering optionalProtect for: ${req.path}`);
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : req.query.token;
   if (token) {
+    console.log(`[DEBUG] optionalProtect - Token found (first 10 chars): ${token.substring(0, 10)}`);
     try {
       const decoded = jwt2.verify(token, process.env.JWT_SECRET || "secret");
       req.user = await User_default.findById(decoded.id).select("-passwordHash");
-    } catch {
-      console.warn("Invalid token provided (header or query):", token);
+      console.log(`[DEBUG] optionalProtect - User found: ${!!req.user}`);
+    } catch (err) {
+      console.warn("[DEBUG] optionalProtect - Invalid token (proceeding as guest):", err.message);
     }
+  } else {
+    console.log("[DEBUG] optionalProtect - No token provided (proceeding as guest)");
   }
   return next();
 };
@@ -694,13 +714,13 @@ var formatBookResponse = (req, book) => {
     coverImage: getFullUrl2(b.coverImage),
     // Proxy URL only — never expose raw storage URLs
     fileUrl: `${baseUrl}/api/books/${b._id}/file`,
-    fileType: b.fileUrl?.toLowerCase().endsWith(".pdf") || b.fileKey?.toLowerCase().endsWith(".pdf") ? "pdf" : "other",
+    fileType: b.fileUrl && typeof b.fileUrl === "string" && b.fileUrl.toLowerCase().endsWith(".pdf") || b.fileKey && typeof b.fileKey === "string" && b.fileKey.toLowerCase().endsWith(".pdf") ? "pdf" : "other",
     // fileKey intentionally omitted — internal storage detail, never expose to client
     content: b.content,
     pageCount: b.pageCount,
     views: b.views,
     likes: b.likes?.length || 0,
-    isLiked: req.user ? b.likes?.includes(req.user._id) : false,
+    isLiked: req.user && b.likes ? b.likes.some((id) => id.toString() === req.user._id.toString()) : false,
     readingMinutes: b.readingMinutes,
     status: b.status,
     visibility: b.visibility,
@@ -709,11 +729,26 @@ var formatBookResponse = (req, book) => {
 };
 
 // server/utils/cloudinaryHelper.ts
-import { v2 as cloudinary } from "cloudinary";
+import { v2 as cloudinary2 } from "cloudinary";
 import fs2 from "fs";
+
+// server/config/cloudinary.ts
+import { v2 as cloudinary } from "cloudinary";
+import dotenv from "dotenv";
+dotenv.config();
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+var isCloudinaryConfigured = () => Boolean(
+  process.env.CLOUDINARY_CLOUD_NAME?.trim() && process.env.CLOUDINARY_API_KEY?.trim() && process.env.CLOUDINARY_API_SECRET?.trim()
+);
+
+// server/utils/cloudinaryHelper.ts
 var uploadToCloudinary = async (filePath, folder, resourceType = "auto") => {
   try {
-    const result = await cloudinary.uploader.upload(filePath, {
+    const result = await cloudinary2.uploader.upload(filePath, {
       folder,
       resource_type: resourceType,
       use_filename: true,
@@ -741,9 +776,19 @@ var getCloudinaryUrl = (publicId, resourceType = "raw") => {
   }
   return `https://res.cloudinary.com/${cloudName}/${resourceType}/upload/${publicId}`;
 };
+var getSignedCloudinaryUrl = (publicId, resourceType = "raw") => {
+  if (!isCloudinaryConfigured()) {
+    return getCloudinaryUrl(publicId, resourceType);
+  }
+  return cloudinary2.url(publicId, {
+    resource_type: resourceType,
+    secure: true,
+    sign_url: true,
+    type: "upload"
+  });
+};
 
 // server/controllers/bookController.ts
-import fetch from "node-fetch";
 var uploadsDirRoot = () => process.env.UPLOADS_PATH || path3.join(process.cwd(), "uploads");
 var extractUploadsRelative = (raw) => {
   const normalized = raw.replace(/\\/g, "/").trim();
@@ -754,82 +799,71 @@ var extractUploadsRelative = (raw) => {
   return null;
 };
 var createBook = async (req, res) => {
-  try {
-    const { title, description, category, tags, visibility, content, readingMinutes, pageCount } = req.body;
-    const files = req.files;
-    let fileKey;
-    let coverImageUrl;
-    const storageType = "cloudinary";
-    if (files?.["file"]?.[0]) {
-      const file = files["file"][0];
-      const result = await uploadToCloudinary(file.path, "books/files", "raw");
-      fileKey = result.public_id;
+  const { title, description, category, tags, visibility, content, readingMinutes, pageCount } = req.body;
+  const files = req.files;
+  let fileKey;
+  let coverImageUrl;
+  const storageType = "cloudinary";
+  if (files?.["file"]?.[0] || files?.["coverImage"]?.[0]) {
+    if (!isCloudinaryConfigured()) {
+      throw new Error("Cloudinary is not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET environment variables.");
     }
-    if (files?.["coverImage"]?.[0]) {
-      const file = files["coverImage"][0];
-      const result = await uploadToCloudinary(file.path, "books/covers", "image");
-      coverImageUrl = result.secure_url;
-    }
-    if (!fileKey && !content) {
-      return res.status(400).json({ message: "Please provide either a file or write content." });
-    }
-    const book = new Book_default({
-      title,
-      authorId: req.user._id,
-      description,
-      category,
-      tags: tags ? typeof tags === "string" ? tags.split(",").map((t) => t.trim()) : tags : [],
-      fileKey,
-      storageType,
-      coverImage: coverImageUrl,
-      content,
-      pageCount: pageCount || 0,
-      visibility: visibility || "public",
-      status: "published",
-      readingMinutes: readingMinutes || 5
-    });
-    const createdBook = await book.save();
-    if (fileKey || content) {
-      await User_default.findByIdAndUpdate(req.user._id, {
-        $inc: { credits: 3 }
-      });
-    }
-    res.status(201).json(formatBookResponse(req, createdBook));
-  } catch (error) {
-    console.error("Upload error details:", {
-      error: error?.message || error,
-      stack: error?.stack,
-      timestamp: (/* @__PURE__ */ new Date()).toISOString()
-    });
-    res.status(500).json({ message: "Book creation failed", error: error.message });
   }
+  if (files?.["file"]?.[0]) {
+    const file = files["file"][0];
+    const result = await uploadToCloudinary(file.path, "books/files", "raw");
+    fileKey = result.public_id;
+  }
+  if (files?.["coverImage"]?.[0]) {
+    const file = files["coverImage"][0];
+    const result = await uploadToCloudinary(file.path, "books/covers", "image");
+    coverImageUrl = result.secure_url;
+  }
+  if (!fileKey && !content) {
+    return res.status(400).json({ message: "Please provide either a file or write content." });
+  }
+  const book = new Book_default({
+    title,
+    authorId: req.user._id,
+    description,
+    category,
+    tags: tags ? typeof tags === "string" ? tags.split(",").map((t) => t.trim()) : tags : [],
+    fileKey,
+    storageType,
+    coverImage: coverImageUrl,
+    content,
+    pageCount: pageCount || 0,
+    visibility: visibility || "public",
+    status: "published",
+    readingMinutes: readingMinutes || 5
+  });
+  const createdBook = await book.save();
+  if (fileKey || content) {
+    await User_default.findByIdAndUpdate(req.user._id, {
+      $inc: { credits: 3 }
+    });
+  }
+  res.status(201).json(formatBookResponse(req, createdBook));
 };
 var streamBookFile = async (req, res) => {
   const bookId = req.params.id;
+  console.log(`[DEBUG] >>> streamBookFile HEARTBEAT: Entering for ID: ${bookId}`);
+  console.log(`[DEBUG] Received headers:`, JSON.stringify(req.headers, null, 2));
   try {
     if (!/^[a-fA-F0-9]{24}$/.test(bookId)) {
       return res.status(400).json({ message: "Invalid book id format" });
     }
     console.log(`[DEBUG] Looking for book with ID: ${bookId}`);
-    console.log(`[DEBUG] ID format valid:`, /^[a-fA-F0-9]{24}$/.test(bookId));
-    const book = await Book_default.findById(bookId).select("+fileUrl +fileKey title visibility storageType").lean();
-    console.log(`[DEBUG] Book found:`, !!book);
+    const book = await Book_default.findById(bookId).select("fileUrl fileKey title visibility storageType").lean();
     if (book) {
-      console.log(`[DEBUG] Book data:`, {
-        fileUrl: !!book.fileUrl,
-        fileKey: !!book.fileKey,
-        storageType: book.storageType,
-        title: book.title
-      });
+      console.log(`[DEBUG] Book found: ${book.title}`);
+      console.log(`[DEBUG] Book metadata - fileUrl: "${book.fileUrl || ""}", fileKey: "${book.fileKey || ""}", storageType: "${book.storageType || ""}"`);
     } else {
-      console.log(`[DEBUG] Book not found in database`);
-    }
-    if (!book) {
-      console.log(`[DEBUG] Book not found in database`);
+      console.log(`[DEBUG] Book NOT found in database: ${bookId}`);
       return res.status(404).json({ message: "Book not found" });
     }
     if (!book.fileUrl && !book.fileKey) {
-      console.log(`[DEBUG] Book has no file information - fileUrl: ${!!book?.fileUrl}, fileKey: ${!!book?.fileKey}`);
+      console.log(`[DEBUG] Book has no file metadata for ID: ${bookId}`);
       return res.status(404).json({ message: "Book has no file" });
     }
     let fileUrl = book.fileUrl;
@@ -849,38 +883,15 @@ var streamBookFile = async (req, res) => {
     const fileName = (book.title || "document").replace(/[^a-z0-9]/gi, "_").toLowerCase();
     res.setHeader("Content-Disposition", `inline; filename="${fileName}.pdf"`);
     if (isCloudinary) {
-      try {
-        console.log(`Proxying Cloudinary file: ${fileUrl}`);
-        const rawUrl = fileUrl.replace(/\/upload\//, "/upload/fl_attachment/").replace(/\.[^.]+$/, "");
-        const response = await fetch(rawUrl, {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (compatible; Silentium-PDF-Viewer)",
-            "Accept": "application/pdf,*/*"
-          }
-        });
-        if (!response.ok) {
-          console.error(`Cloudinary fetch failed: ${response.status} ${response.statusText}`);
-          return res.status(response.status).json({
-            message: `Failed to fetch file from cloud storage (${response.status})`,
-            url: rawUrl,
-            error: response.statusText
-          });
-        }
-        if (response.body) {
-          res.status(response.status);
-          response.body.pipe(res);
-        } else {
-          res.status(500).json({ message: "Cloud storage response has no body" });
-        }
-      } catch (error) {
-        console.error("Proxy Error (Cloudinary):", error);
-        if (!res.headersSent) {
-          res.status(500).json({
-            message: "Error streaming from cloud storage",
-            error: error.message
-          });
-        }
+      const publicId = book.fileKey || "";
+      if (!publicId) {
+        console.error(`[DEBUG] Missing fileKey for Cloudinary book: ${bookId}`);
+        return res.status(404).json({ message: "Cloudinary resource ID missing" });
       }
+      console.log(`[DEBUG] Generating signed URL for: ${publicId}`);
+      const signedUrl = getSignedCloudinaryUrl(publicId, "raw");
+      console.log(`[DEBUG] Redirecting to SIGNED URL: ${signedUrl}`);
+      return res.redirect(302, signedUrl);
     } else {
       const relativePath = extractUploadsRelative(fileUrl || "");
       if (relativePath) {
@@ -958,8 +969,10 @@ var getBooks = async (req, res) => {
   res.json({ books: formattedBooks, page, pages: Math.ceil(count / pageSize), total: count });
 };
 var getBookById = async (req, res) => {
-  const book = await Book_default.findById(req.params.id).populate("authorId", "name email avatar credits");
+  const bookId = req.params.id;
+  const book = await Book_default.findById(bookId).populate("authorId", "name email avatar credits");
   if (book) {
+    console.log(`[DEBUG] getBookById - Book: ${bookId}, title: ${book.title}, fileUrl: ${!!book.fileUrl}, fileKey: ${!!book.fileKey}`);
     book.views += 1;
     await book.save();
     res.json(formatBookResponse(req, book));
@@ -1734,10 +1747,16 @@ var errorHandler = (err, req, res, next) => {
 };
 
 // server.ts
-dotenv.config();
+dotenv2.config();
 var __filename = fileURLToPath(import.meta.url);
 var __dirname = path4.dirname(__filename);
 var app = express9();
+app.use((req, res, next) => {
+  if (req.path.includes("/api/")) {
+    console.log(`[DEBUG] Incoming Request: ${req.method} ${req.path} ${JSON.stringify(req.query)}`);
+  }
+  next();
+});
 var isConnected = false;
 var connectionPromise = null;
 var ensureConnection = async () => {
@@ -1877,10 +1896,14 @@ app.use("/api/payments", paymentRoutes_default);
 app.use("/api/revenue", revenueRoutes_default);
 app.use("/api/users", userRoutes_default);
 app.use("/api/comments", commentRoutes_default);
+app.get("/api/debug-ping", (req, res) => {
+  console.log("[DEBUG] PING received");
+  res.json({ pong: true, timestamp: (/* @__PURE__ */ new Date()).toISOString() });
+});
 app.use("/api/user", authRoutes_default);
 app.use("/api/documents", bookRoutes_default);
 var setupFrontend = async () => {
-  console.log("=== Silentium Server Startup ===");
+  console.log("=== Silentium Server Startup [FIX_VER: 1.0.8] ===");
   console.log("Environment:", process.env.NODE_ENV);
   console.log("Platform:", process.platform);
   console.log("Node Version:", process.version);
@@ -1888,7 +1911,14 @@ var setupFrontend = async () => {
   console.log("Render Service:", process.env.RENDER_SERVICE_ID || "Not running on Render");
   console.log("Mongo URI configured:", !!process.env.MONGO_URI);
   console.log("JWT Secret configured:", !!process.env.JWT_SECRET);
+  console.log("Cloudinary configured:", !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY));
   console.log("================================");
+  process.on("unhandledRejection", (reason, promise) => {
+    console.error("[FATAL] Unhandled Rejection at:", promise, "reason:", reason);
+  });
+  process.on("uncaughtException", (err) => {
+    console.error("[FATAL] Uncaught Exception:", err);
+  });
   if (isDev2 && !process.env.VERCEL) {
     try {
       const vite = await createViteServer({
