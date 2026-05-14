@@ -145,46 +145,13 @@ export const streamBookFile = async (req: Request, res: Response) => {
 
     if (isCloudinary) {
       try {
-        const publicId = book.fileKey || '';
-        if (!publicId) {
-          console.error(`[DEBUG] Missing fileKey for Cloudinary book: ${bookId}`);
-          return res.status(404).json({ message: 'Cloudinary resource ID missing' });
-        }
-
-        console.log(`[DEBUG] Proxying PUBLIC URL: ${fileUrl}`);
-
-        const response = await fetch(fileUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; Silentium-PDF-Viewer)',
-            'Accept': 'application/pdf,*/*'
-          }
-        });
-        
-        console.log(`[DEBUG] Cloudinary public fetch status: ${response.status} ${response.statusText}`);
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`[DEBUG] Cloudinary public fetch failed: ${response.status} ${response.statusText}. Response body: ${errorText}`);
-          return res.status(response.status).json({ 
-            message: `Failed to fetch file (${response.status})`,
-            error: response.statusText,
-            details: errorText
-          });
-        }
-        
-        if (response.body) {
-          console.log(`[DEBUG] Successfully streaming file for book ${bookId}`);
-          res.status(response.status);
-          response.body.pipe(res);
-        } else {
-          console.error(`[DEBUG] Cloud storage response has no body for book ${bookId}`);
-          res.status(500).json({ message: 'Cloud storage response has no body' });
-        }
+        console.log(`[DEBUG] Redirecting to PUBLIC URL: ${fileUrl}`);
+        return res.redirect(302, fileUrl);
       } catch (error: any) {
-        console.error('[DEBUG] Cloudinary Signed Proxy Error:', error);
+        console.error('[DEBUG] Cloudinary Redirect Error:', error);
         if (!res.headersSent) {
           res.status(500).json({ 
-            message: 'Error streaming from cloud storage',
+            message: 'Error redirecting to cloud storage',
             error: error.message 
           });
         }
