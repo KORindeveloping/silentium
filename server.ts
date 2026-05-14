@@ -212,6 +212,7 @@ const setupFrontend = async () => {
   console.log('Render Service:', process.env.RENDER_SERVICE_ID || 'Not running on Render');
   console.log('Mongo URI configured:', !!process.env.MONGO_URI);
   console.log('JWT Secret configured:', !!process.env.JWT_SECRET);
+  console.log('Cloudinary configured:', !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY));
   console.log('================================');
 
   if (isDev && !process.env.VERCEL) {

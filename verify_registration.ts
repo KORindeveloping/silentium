@@ -28,7 +28,7 @@ const verify = async () => {
     console.log('Profile Success:', profileData.email);
 
     console.log('\n--- Verifying Login ---');
-    const loginRes = await fetch(`${API_URL}/api/auth/login`, {
+    const loginRes = await fetch(`${API_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

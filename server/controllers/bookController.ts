@@ -31,66 +31,63 @@ const extractUploadsRelative = (raw: string): string | null => {
 // @route   POST /api/books
 // @access  Private/Author
 export const createBook = async (req: Request, res: Response) => {
-  try {
-    const { title, description, category, tags, visibility, content, readingMinutes, pageCount } = req.body;
-    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+  const { title, description, category, tags, visibility, content, readingMinutes, pageCount } = req.body;
+  const files = req.files as { [fieldname: string]: Express.Multer.File[] };
 
-    let fileKey: string | undefined;
-    let coverImageUrl: string | undefined;
-    const storageType = 'cloudinary';
+  let fileKey: string | undefined;
+  let coverImageUrl: string | undefined;
+  const storageType = 'cloudinary';
 
-    // Upload files to Cloudinary
-    if (files?.['file']?.[0]) {
-      const file = files['file'][0];
-      const result = await uploadToCloudinary(file.path, 'books/files', 'raw');
-      fileKey = result.public_id;
+  // Check if Cloudinary is configured if files are provided
+  if (files?.['file']?.[0] || files?.['coverImage']?.[0]) {
+    if (!isCloudinaryConfigured()) {
+      throw new Error('Cloudinary is not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET environment variables.');
     }
-
-    if (files?.['coverImage']?.[0]) {
-      const file = files['coverImage'][0];
-      const result = await uploadToCloudinary(file.path, 'books/covers', 'image');
-      coverImageUrl = result.secure_url;
-    }
-
-
-    if (!fileKey && !content) {
-      return res.status(400).json({ message: 'Please provide either a file or write content.' });
-    }
-
-    const book = new Book({
-      title,
-      authorId: (req as any).user._id,
-      description,
-      category,
-      tags: tags ? (typeof tags === 'string' ? tags.split(',').map((t: string) => t.trim()) : tags) : [],
-      fileKey,
-      storageType,
-      coverImage: coverImageUrl,
-      content,
-      pageCount: pageCount || 0,
-      visibility: visibility || 'public',
-      status: 'published',
-      readingMinutes: readingMinutes || 5,
-    });
-
-    const createdBook = await book.save();
-
-    if (fileKey || content) {
-      await User.findByIdAndUpdate((req as any).user._id, {
-        $inc: { credits: 3 }
-      });
-    }
-
-    res.status(201).json(formatBookResponse(req, createdBook));
-  } catch (error: any) {
-    console.error('Upload error details:', {
-      error: error?.message || error,
-      stack: error?.stack,
-      timestamp: new Date().toISOString(),
-    });
-    
-    res.status(500).json({ message: 'Book creation failed', error: error.message });
   }
+
+  // Upload files to Cloudinary
+  if (files?.['file']?.[0]) {
+    const file = files['file'][0];
+    const result = await uploadToCloudinary(file.path, 'books/files', 'raw');
+    fileKey = result.public_id;
+  }
+
+  if (files?.['coverImage']?.[0]) {
+    const file = files['coverImage'][0];
+    const result = await uploadToCloudinary(file.path, 'books/covers', 'image');
+    coverImageUrl = result.secure_url;
+  }
+
+
+  if (!fileKey && !content) {
+    return res.status(400).json({ message: 'Please provide either a file or write content.' });
+  }
+
+  const book = new Book({
+    title,
+    authorId: (req as any).user._id,
+    description,
+    category,
+    tags: tags ? (typeof tags === 'string' ? tags.split(',').map((t: string) => t.trim()) : tags) : [],
+    fileKey,
+    storageType,
+    coverImage: coverImageUrl,
+    content,
+    pageCount: pageCount || 0,
+    visibility: visibility || 'public',
+    status: 'published',
+    readingMinutes: readingMinutes || 5,
+  });
+
+  const createdBook = await book.save();
+
+  if (fileKey || content) {
+    await User.findByIdAndUpdate((req as any).user._id, {
+      $inc: { credits: 3 }
+    });
+  }
+
+  res.status(201).json(formatBookResponse(req, createdBook));
 };
 
 /** @route GET /api/books/:id/file */

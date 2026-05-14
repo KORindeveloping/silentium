@@ -12,11 +12,13 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
     return res.status(500).json({ message: 'Internal Server Error (next is not a function)' });
   }
 
-  const token = req.headers.authorization?.split(" ")[1];
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.split(" ")[1];
 
-  if (!token) {
+  if (!token || token === 'undefined' || token === 'null') {
     return res.status(401).json({
-      message: "Not authorized, no token"
+      message: "Not authorized, no valid token provided",
+      code: 'NO_TOKEN'
     });
   }
 
@@ -25,19 +27,31 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
     req.user = await User.findById(decoded.id).select('-passwordHash');
     
     if (!req.user) {
-      return res.status(401).json({ message: 'Not authorized, user not found' });
+      return res.status(401).json({ 
+        message: 'Not authorized, user no longer exists in database. Your session may have been cleared if using in-memory storage.',
+        code: 'USER_NOT_FOUND' 
+      });
     }
     
     return next();
   } catch (error: any) {
-    console.error('JWT Error:', error.message);
+    console.error('JWT Error:', error.message, 'Token snippet:', token.substring(0, 10) + '...');
     if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ message: 'Not authorized, invalid token' });
+      return res.status(401).json({ 
+        message: 'Not authorized, invalid or malformed token',
+        code: 'INVALID_TOKEN'
+      });
     }
     if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ message: 'Not authorized, token expired' });
+      return res.status(401).json({ 
+        message: 'Not authorized, token expired',
+        code: 'TOKEN_EXPIRED'
+      });
     }
-    return res.status(401).json({ message: 'Not authorized, token failed' });
+    return res.status(401).json({ 
+      message: 'Not authorized, token validation failed',
+      code: 'AUTH_FAILED'
+    });
   }
 };
 

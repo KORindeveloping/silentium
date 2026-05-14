@@ -37,7 +37,9 @@ export const formatBookResponse = (req: Request, book: any) => {
     pageCount: b.pageCount,
     views: b.views,
     likes: b.likes?.length || 0,
-    isLiked: (req as any).user ? b.likes?.includes((req as any).user._id) : false,
+    isLiked: ((req as any).user && b.likes) 
+      ? b.likes.some((id: any) => id.toString() === (req as any).user._id.toString()) 
+      : false,
     readingMinutes: b.readingMinutes,
     status: b.status,
     visibility: b.visibility,
