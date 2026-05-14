@@ -154,16 +154,36 @@ export const streamBookFile = async (req: Request, res: Response) => {
         console.log(`[DEBUG] Generating signed URL for: ${publicId}`);
         const signedUrl = getSignedCloudinaryUrl(publicId, 'raw');
         
-        console.log(`[DEBUG] Redirecting to signed URL: ${signedUrl}`);
+        console.log(`[DEBUG] Proxying signed URL: ${signedUrl}`);
+
+        const response = await fetch(signedUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; Silentium-PDF-Viewer)',
+            'Accept': 'application/pdf,*/*'
+          }
+        });
         
-        // Ensure CORS headers are set for the redirect so PDF.js can follow it
-        res.setHeader('Access-Control-Expose-Headers', 'Location');
-        return res.redirect(302, signedUrl);
+        if (!response.ok) {
+          console.error(`[DEBUG] Cloudinary signed fetch failed: ${response.status} ${response.statusText}`);
+          return res.status(response.status).json({ 
+            message: `Failed to fetch secure file (${response.status})`,
+            error: response.statusText
+          });
+        }
+        
+        if (response.body) {
+          console.log(`[DEBUG] Successfully streaming signed file for book ${bookId}`);
+          res.status(response.status);
+          response.body.pipe(res);
+        } else {
+          console.error(`[DEBUG] Cloud storage response has no body for book ${bookId}`);
+          res.status(500).json({ message: 'Cloud storage response has no body' });
+        }
       } catch (error: any) {
-        console.error('[DEBUG] Cloudinary Signed URL Error:', error);
+        console.error('[DEBUG] Cloudinary Signed Proxy Error:', error);
         if (!res.headersSent) {
           res.status(500).json({ 
-            message: 'Error generating cloud storage access',
+            message: 'Error streaming from cloud storage',
             error: error.message 
           });
         }
