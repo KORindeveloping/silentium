@@ -132,10 +132,10 @@ app.use(asyncHandler(async (req: any, res: any, next: any) => {
   try {
     await ensureConnection();
   } catch (error: any) {
-    console.error('Database connection failed:', error.message);
+    console.error('Database connection failed:', error?.message || String(error));
     return res.status(500).json({
       message: 'Database connection failed',
-      error: process.env.NODE_ENV !== 'production' ? error.message : undefined
+      error: process.env.NODE_ENV !== 'production' ? error?.message : undefined
     });
   }
   next();
@@ -178,8 +178,8 @@ app.get('/test-upload', (req, res) => {
       url: `${req.protocol}://${req.get('host')}/uploads/test-sample.pdf`,
       uploadsDir: uploadsDir
     });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Unknown error occurred' });
   }
 });
 
