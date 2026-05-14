@@ -93,6 +93,7 @@ export const createBook = async (req: Request, res: Response) => {
 export const streamBookFile = async (req: Request, res: Response) => {
   const bookId = req.params.id;
   console.log(`[DEBUG] >>> streamBookFile HEARTBEAT: Entering for ID: ${bookId}`);
+  console.log(`[DEBUG] Received headers:`, JSON.stringify(req.headers, null, 2));
   try {
     if (!/^[a-fA-F0-9]{24}$/.test(bookId)) {
       return res.status(400).json({ message: 'Invalid book id format' });
