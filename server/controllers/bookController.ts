@@ -6,7 +6,7 @@ import Book from '../models/Book';
 import User from '../models/User';
 import { formatBookResponse } from '../utils/bookFormatter.js';
 import { uploadToCloudinary, getCloudinaryUrl, getSignedCloudinaryUrl } from '../utils/cloudinaryHelper';
-import { isCloudinaryConfigured } from '../utils/cloudinaryHelper'; // Re-export or use existing check
+import { isCloudinaryConfigured } from '../config/cloudinary';
 import fetch from 'node-fetch';
 
 const uploadsDirRoot = () => process.env.UPLOADS_PATH || path.join(process.cwd(), 'uploads');
