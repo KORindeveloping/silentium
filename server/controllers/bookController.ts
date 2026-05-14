@@ -99,28 +99,23 @@ export const streamBookFile = async (req: Request, res: Response) => {
     }
 
     console.log(`[DEBUG] Looking for book with ID: ${bookId}`);
-    console.log(`[DEBUG] ID format valid:`, /^[a-fA-F0-9]{24}$/.test(bookId));
     
-    const book = await Book.findById(bookId).select('+fileUrl +fileKey title visibility storageType').lean<{ fileUrl?: string, title?: string, visibility?: string, fileKey?: string, storageType?: string }>();
-    console.log(`[DEBUG] Book found:`, !!book);
+    // Simplified query - avoid '+' prefix if fields are not select:false, and ensure we get what we need
+    const book = await Book.findById(bookId)
+      .select('fileUrl fileKey title visibility storageType')
+      .lean<{ fileUrl?: string, title?: string, visibility?: string, fileKey?: string, storageType?: string }>();
+
     if (book) {
-      console.log(`[DEBUG] Book data:`, {
-        fileUrl: !!book.fileUrl,
-        fileKey: !!book.fileKey,
-        storageType: book.storageType,
-        title: book.title
-      });
+      console.log(`[DEBUG] Book found: ${book.title}`);
+      console.log(`[DEBUG] Book metadata - fileUrl: "${book.fileUrl || ''}", fileKey: "${book.fileKey || ''}", storageType: "${book.storageType || ''}"`);
     } else {
-      console.log(`[DEBUG] Book not found in database`);
-    }
-    if (!book) {
-      console.log(`[DEBUG] Book not found in database`);
+      console.log(`[DEBUG] Book NOT found in database: ${bookId}`);
       return res.status(404).json({ message: 'Book not found' });
     }
     
     // Check if book has any file information
     if (!book.fileUrl && !book.fileKey) {
-      console.log(`[DEBUG] Book has no file information - fileUrl: ${!!book?.fileUrl}, fileKey: ${!!book?.fileKey}`);
+      console.log(`[DEBUG] Book has no file metadata for ID: ${bookId}`);
       return res.status(404).json({ message: 'Book has no file' });
     }
 
