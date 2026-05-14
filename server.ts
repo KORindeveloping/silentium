@@ -204,7 +204,7 @@ app.use('/api/documents', bookRoutes);
 // 5. Frontend / Vite
 const setupFrontend = async () => {
   // Log startup information for debugging
-  console.log('=== Silentium Server Startup ===');
+  console.log('=== Silentium Server Startup [FIX_VER: 1.0.6] ===');
   console.log('Environment:', process.env.NODE_ENV);
   console.log('Platform:', process.platform);
   console.log('Node Version:', process.version);
@@ -214,6 +214,15 @@ const setupFrontend = async () => {
   console.log('JWT Secret configured:', !!process.env.JWT_SECRET);
   console.log('Cloudinary configured:', !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY));
   console.log('================================');
+
+  // Global error handlers
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('[FATAL] Unhandled Rejection at:', promise, 'reason:', reason);
+  });
+
+  process.on('uncaughtException', (err) => {
+    console.error('[FATAL] Uncaught Exception:', err);
+  });
 
   if (isDev && !process.env.VERCEL) {
     try {
