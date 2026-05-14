@@ -205,6 +205,11 @@ app.use('/api/revenue', revenueRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/comments', commentRoutes);
 
+app.get('/api/debug-ping', (req, res) => {
+  console.log('[DEBUG] PING received');
+  res.json({ pong: true, timestamp: new Date().toISOString() });
+});
+
 // Compatibility aliases
 app.use('/api/user', authRoutes);
 app.use('/api/documents', bookRoutes);
@@ -212,7 +217,7 @@ app.use('/api/documents', bookRoutes);
 // 5. Frontend / Vite
 const setupFrontend = async () => {
   // Log startup information for debugging
-  console.log('=== Silentium Server Startup [FIX_VER: 1.0.7] ===');
+  console.log('=== Silentium Server Startup [FIX_VER: 1.0.8] ===');
   console.log('Environment:', process.env.NODE_ENV);
   console.log('Platform:', process.platform);
   console.log('Node Version:', process.version);
